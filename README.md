@@ -133,7 +133,9 @@ Built with:
 
 ## License
 
-MIT License - see LICENSE file for details
+Apache License 2.0 - see [LICENSE](LICENSE) file for details
+
+This project includes [MathJax](https://www.mathjax.org/), which is also licensed under Apache 2.0. See [NOTICE](NOTICE) for attribution details.
 
 ## Contributing
 

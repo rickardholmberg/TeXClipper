@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 56;
+	objectVersion = 70;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -16,6 +16,16 @@
 		C9EEA1A72F01A170008FD847 /* mathjax-tex-svg.js in Resources */ = {isa = PBXBuildFile; fileRef = C9EEA1A62F01A170008FD847 /* mathjax-tex-svg.js */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		C9EEA1B02F01F0B5008FD847 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AA0029 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AA0025;
+			remoteInfo = TeXClipper;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		AA0002 /* TeXClipperApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TeXClipperApp.swift; sourceTree = "<group>"; };
 		AA0004 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -26,10 +36,22 @@
 		AA0017 /* TeXClipper.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TeXClipper.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA0018 /* TeXClipper.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = TeXClipper.entitlements; sourceTree = "<group>"; };
 		C9EEA1A62F01A170008FD847 /* mathjax-tex-svg.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = "mathjax-tex-svg.js"; sourceTree = "<group>"; };
+		C9EEA1AC2F01F0B5008FD847 /* TeXClipperTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TeXClipperTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		C9EEA1AD2F01F0B5008FD847 /* TeXClipperTests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = TeXClipperTests; sourceTree = "<group>"; };
+/* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		AA0019 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C9EEA1A92F01F0B5008FD847 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -43,6 +65,7 @@
 			isa = PBXGroup;
 			children = (
 				AA0021 /* TeXClipper */,
+				C9EEA1AD2F01F0B5008FD847 /* TeXClipperTests */,
 				AA0022 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -64,6 +87,7 @@
 			isa = PBXGroup;
 			children = (
 				AA0017 /* TeXClipper.app */,
+				C9EEA1AC2F01F0B5008FD847 /* TeXClipperTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -106,6 +130,29 @@
 			productReference = AA0017 /* TeXClipper.app */;
 			productType = "com.apple.product-type.application";
 		};
+		C9EEA1AB2F01F0B5008FD847 /* TeXClipperTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C9EEA1B42F01F0B5008FD847 /* Build configuration list for PBXNativeTarget "TeXClipperTests" */;
+			buildPhases = (
+				C9EEA1A82F01F0B5008FD847 /* Sources */,
+				C9EEA1A92F01F0B5008FD847 /* Frameworks */,
+				C9EEA1AA2F01F0B5008FD847 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				C9EEA1B12F01F0B5008FD847 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				C9EEA1AD2F01F0B5008FD847 /* TeXClipperTests */,
+			);
+			name = TeXClipperTests;
+			packageProductDependencies = (
+			);
+			productName = TeXClipperTests;
+			productReference = C9EEA1AC2F01F0B5008FD847 /* TeXClipperTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -113,11 +160,15 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 1500;
+				LastSwiftUpdateCheck = 2620;
 				LastUpgradeCheck = 1500;
 				TargetAttributes = {
 					AA0025 = {
 						CreatedOnToolsVersion = 15.0;
+					};
+					C9EEA1AB2F01F0B5008FD847 = {
+						CreatedOnToolsVersion = 26.2;
+						TestTargetID = AA0025;
 					};
 				};
 			};
@@ -135,6 +186,7 @@
 			projectRoot = "";
 			targets = (
 				AA0025 /* TeXClipper */,
+				C9EEA1AB2F01F0B5008FD847 /* TeXClipperTests */,
 			);
 		};
 /* End PBXProject section */
@@ -146,6 +198,13 @@
 			files = (
 				AA0005 /* Assets.xcassets in Resources */,
 				C9EEA1A72F01A170008FD847 /* mathjax-tex-svg.js in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C9EEA1AA2F01F0B5008FD847 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -164,7 +223,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		C9EEA1A82F01F0B5008FD847 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		C9EEA1B12F01F0B5008FD847 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AA0025 /* TeXClipper */;
+			targetProxy = C9EEA1B02F01F0B5008FD847 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		AA0031 /* Debug */ = {
@@ -337,6 +411,46 @@
 			};
 			name = Release;
 		};
+		C9EEA1B22F01F0B5008FD847 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.1;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = rickardholmberg.TeXClipperTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TeXClipper.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/TeXClipper";
+			};
+			name = Debug;
+		};
+		C9EEA1B32F01F0B5008FD847 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.1;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = rickardholmberg.TeXClipperTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TeXClipper.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/TeXClipper";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -354,6 +468,15 @@
 			buildConfigurations = (
 				AA0031 /* Debug */,
 				AA0032 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C9EEA1B42F01F0B5008FD847 /* Build configuration list for PBXNativeTarget "TeXClipperTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C9EEA1B22F01F0B5008FD847 /* Debug */,
+				C9EEA1B32F01F0B5008FD847 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

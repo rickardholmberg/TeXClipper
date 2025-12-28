@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:texclipper}",
+            "name": "Debug TeXClipper",
+            "target": "TeXClipper",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug TeXClipper"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:texclipper}",
+            "name": "Release TeXClipper",
+            "target": "TeXClipper",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release TeXClipper"
+        }
+    ]
+}

@@ -82,14 +82,27 @@ struct ContentView: View {
 
             Spacer()
 
-            Text("The app runs in the menu bar. Use shortcuts to convert LaTeX selections.")
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.bottom)
+            VStack(spacing: 4) {
+                Text("The app runs in the menu bar. Use shortcuts to convert LaTeX selections.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+
+                Divider()
+                    .padding(.vertical, 4)
+
+                Text("Licensed under Apache License 2.0")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+
+                Text("Includes MathJax © 2009-2023 The MathJax Consortium (Apache 2.0)")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+            .padding(.bottom)
         }
         .padding()
-        .frame(width: 500, height: 500)
+        .frame(width: 500, height: 550)
     }
 
     private func testRender() {

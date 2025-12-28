@@ -151,34 +151,41 @@ class MathRenderer: NSObject {
 
     @MainActor
     func renderToSVG(latex: String) async throws -> String {
+        // Strip leading and trailing whitespace from LaTeX
+        let trimmedLatex = latex.trimmingCharacters(in: .whitespacesAndNewlines)
+
         return try await withCheckedThrowingContinuation { continuation in
             let callback: (Result<String, Error>) -> Void = { result in
                 continuation.resume(with: result)
             }
 
             if !self.isReady {
-                print("WebView not ready yet, queueing render for: \(latex)")
-                self.pendingRenders.append((latex: latex, callback: callback))
+                print("WebView not ready yet, queueing render for: \(trimmedLatex)")
+                self.pendingRenders.append((latex: trimmedLatex, callback: callback))
                 return
             }
 
-            self.executeRender(latex: latex, completion: callback)
+            self.executeRender(latex: trimmedLatex, completion: callback)
         }
     }
 
     @MainActor
     func renderToSVGDirect(latex: String, displayMode: Bool = true) async throws -> String {
+        // Strip leading and trailing whitespace from LaTeX
+        let trimmedLatex = latex.trimmingCharacters(in: .whitespacesAndNewlines)
         // Render to SVG using MathJax
-        return try await renderToSVGInternal(latex: latex, displayMode: displayMode)
+        return try await renderToSVGInternal(latex: trimmedLatex, displayMode: displayMode)
     }
 
     @MainActor
     func renderToPDF(latex: String, displayMode: Bool = true) async throws -> Data {
+        // Strip leading and trailing whitespace from LaTeX
+        let trimmedLatex = latex.trimmingCharacters(in: .whitespacesAndNewlines)
         // Render to SVG using MathJax, then convert SVG to PDF using WebKit
-        let svgString = try await renderToSVGInternal(latex: latex, displayMode: displayMode)
+        let svgString = try await renderToSVGInternal(latex: trimmedLatex, displayMode: displayMode)
 
         // Use WebKit to render SVG to PDF (preserves vector graphics)
-        return try await convertSVGToPDFWithWebKit(svgString: svgString, latex: latex)
+        return try await convertSVGToPDFWithWebKit(svgString: svgString, latex: trimmedLatex)
     }
 
     @MainActor
