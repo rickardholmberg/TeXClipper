@@ -64,9 +64,13 @@ jobs:
 
           ### Installation
           1. Download `TeXClipper.zip`
-          2. Unzip and move `TeXClipper.app` to `/Applications`
-          3. Right-click the app and select "Open" (first time only, to bypass Gatekeeper)
-          4. Grant Accessibility permissions when prompted
+          2. Unzip the file
+          3. Remove the quarantine attribute (required for unsigned apps):
+             ```bash
+             xattr -d -r com.apple.quarantine TeXClipper.app
+             ```
+          4. Move `TeXClipper.app` to `/Applications`
+          5. Launch the app and grant Accessibility permissions when prompted
 
           ### Keyboard Shortcuts
           - **⌘⌥K** - Render LaTeX (display mode)

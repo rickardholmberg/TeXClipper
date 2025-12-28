@@ -21,9 +21,13 @@ A macOS menu bar app that renders LaTeX math expressions to vector graphics with
 ### From Release
 
 1. Download `TeXClipper.zip` from the [latest release](https://github.com/yourusername/TeXClipper/releases)
-2. Unzip and move `TeXClipper.app` to `/Applications`
-3. Right-click the app and select "Open" (first time only to bypass Gatekeeper)
-4. Grant Accessibility permissions when prompted in System Settings
+2. Unzip the file
+3. Remove the quarantine attribute (required for unsigned apps on macOS 15+):
+   ```bash
+   xattr -d -r com.apple.quarantine TeXClipper.app
+   ```
+4. Move `TeXClipper.app` to `/Applications`
+5. Launch the app and grant Accessibility permissions when prompted in System Settings
 
 ### Building from Source
 
@@ -108,6 +112,11 @@ Built with:
 - MathJax 3.2.2 with fontCache: 'none' for pure vector output
 
 ## Troubleshooting
+
+### App won't open / "damaged" error
+- This happens when the quarantine attribute is set on unsigned apps
+- Solution: `xattr -d -r com.apple.quarantine /Applications/TeXClipper.app`
+- Alternatively, right-click the app and select "Open" to bypass Gatekeeper
 
 ### Shortcuts not working
 - Check Accessibility permissions in System Settings > Privacy & Security
