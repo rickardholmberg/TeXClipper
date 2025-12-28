@@ -1,0 +1,85 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Xcode
+      uses: maxim-lobanov/setup-xcode@v1
+      with:
+        xcode-version: latest-stable
+
+    - name: Download and setup MathJax
+      run: |
+        chmod +x setup-mathjax.sh
+        ./setup-mathjax.sh
+
+    - name: Build app
+      run: |
+        xcodebuild -scheme TeXClipper \
+          -configuration Release \
+          -derivedDataPath build \
+          CODE_SIGN_IDENTITY="-" \
+          CODE_SIGNING_REQUIRED=NO \
+          CODE_SIGNING_ALLOWED=NO
+
+    - name: Create app bundle ZIP
+      run: |
+        cd build/Build/Products/Release
+        zip -r TeXClipper.zip TeXClipper.app
+        mv TeXClipper.zip ../../../../
+
+    - name: Get version from tag
+      id: get_version
+      run: |
+        if [ "${{ github.ref_type }}" == "tag" ]; then
+          echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        else
+          echo "version=dev-$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+        files: TeXClipper.zip
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+        body: |
+          ## TeXClipper ${{ steps.get_version.outputs.version }}
+
+          ### Installation
+          1. Download `TeXClipper.zip`
+          2. Unzip and move `TeXClipper.app` to `/Applications`
+          3. Right-click the app and select "Open" (first time only, to bypass Gatekeeper)
+          4. Grant Accessibility permissions when prompted
+
+          ### Keyboard Shortcuts
+          - **⌘⌥K** - Render LaTeX (display mode)
+          - **⌘⌥I** - Render LaTeX (inline mode)
+          - **⌘⌥⇧K** - Revert rendered math back to LaTeX
+
+          ### Notes
+          - This is an unsigned build. macOS will warn you on first launch.
+          - The app requires Accessibility permissions to capture keyboard shortcuts system-wide.
+          - Rendered math is vector graphics (PDF/SVG), not rasterized images.
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Upload artifact (for non-tag builds)
+      if: "!startsWith(github.ref, 'refs/tags/')"
+      uses: actions/upload-artifact@v4
+      with:
+        name: TeXClipper-${{ steps.get_version.outputs.version }}
+        path: TeXClipper.zip

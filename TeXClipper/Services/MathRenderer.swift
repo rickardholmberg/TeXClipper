@@ -1,0 +1,434 @@
+import Foundation
+import WebKit
+import ObjectiveC
+import PDFKit
+
+// Helper class to wrap a closure as a WKScriptMessageHandler
+private class WKScriptMessageHandlerWrapper: NSObject, WKScriptMessageHandler {
+    private let handler: (WKScriptMessage) -> Void
+
+    init(handler: @escaping (WKScriptMessage) -> Void) {
+        self.handler = handler
+        super.init()
+    }
+
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        handler(message)
+    }
+}
+
+class MathRenderer: NSObject {
+    static let shared = MathRenderer()
+
+    private var webView: WKWebView?
+    private var isReady = false
+    private var pendingRenders: [(latex: String, callback: (Result<String, Error>) -> Void)] = []
+    private var messageHandlers: [String: WKScriptMessageHandlerWrapper] = [:]
+
+    override init() {
+        super.init()
+        setupWebView()
+    }
+
+    private func setupWebView() {
+        let config = WKWebViewConfiguration()
+
+        // Enable JavaScript (should be default, but let's be explicit)
+        config.preferences.javaScriptEnabled = true
+
+        // These preferences might help with loading
+        if #available(macOS 11.0, *) {
+            config.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
+        }
+
+        // Register message handler for ready callback
+        config.userContentController.add(self, name: "ready")
+
+        // Enable JavaScript console logging
+        if #available(macOS 11.0, *) {
+            config.preferences.setValue(true, forKey: "developerExtrasEnabled")
+        }
+
+        webView = WKWebView(frame: .zero, configuration: config)
+        webView?.navigationDelegate = self
+        webView?.uiDelegate = self
+
+        print("WebView created, about to load MathJax...")
+        loadMathJax()
+    }
+
+    private func loadMathJax() {
+        guard let mathjaxPath = Bundle.main.path(forResource: "mathjax-tex-svg", ofType: "js") else {
+            print("Error: Could not find MathJax file in bundle")
+            return
+        }
+
+        guard let mathjaxJS = try? String(contentsOfFile: mathjaxPath) else {
+            print("Error: Could not read MathJax file")
+            return
+        }
+
+        print("Successfully loaded MathJax")
+        print("  JS size: \(mathjaxJS.count) bytes")
+
+        let html = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <script>
+            window.MathJax = {
+                startup: {
+                    ready: () => {
+                        MathJax.startup.defaultReady();
+                        window.webkit.messageHandlers.ready.postMessage('ready');
+                    }
+                },
+                svg: {
+                    fontCache: 'none'  // This makes MathJax use paths instead of font references
+                }
+            };
+            </script>
+            <script>\(mathjaxJS)</script>
+        </head>
+        <body>
+            <div id="output"></div>
+            <script>
+                window.renderToSVG = async function(latex, displayMode) {
+                    try {
+                        console.log('renderToSVG called with:', latex, displayMode);
+
+                        // Clear output
+                        const output = document.getElementById('output');
+                        output.innerHTML = '';
+
+                        // Wrap in appropriate delimiters
+                        const wrappedLatex = displayMode ? '\\\\[' + latex + '\\\\]' : '\\\\(' + latex + '\\\\)';
+                        console.log('Wrapped latex:', wrappedLatex);
+
+                        // Create a container for MathJax to render into
+                        const container = document.createElement('div');
+                        container.textContent = wrappedLatex;
+                        output.appendChild(container);
+
+                        // Typeset the math - await the Promise
+                        console.log('Calling MathJax.typesetPromise...');
+                        await MathJax.typesetPromise([container]);
+                        console.log('MathJax.typesetPromise completed');
+
+                        // Get the rendered SVG
+                        const svgElement = output.querySelector('svg');
+                        console.log('SVG element:', svgElement);
+                        if (!svgElement) {
+                            throw new Error('No SVG generated');
+                        }
+
+                        // Clone and add metadata with original LaTeX
+                        const svgClone = svgElement.cloneNode(true);
+                        const metadata = document.createElementNS('http://www.w3.org/2000/svg', 'metadata');
+                        metadata.textContent = JSON.stringify({ latex: latex });
+                        svgClone.insertBefore(metadata, svgClone.firstChild);
+
+                        // Serialize to string
+                        const serializer = new XMLSerializer();
+                        const result = serializer.serializeToString(svgClone);
+                        console.log('Returning SVG string of length:', result.length);
+                        return result;
+                    } catch (e) {
+                        console.error('MathJax render error:', e);
+                        throw new Error('MathJax render error: ' + e.message);
+                    }
+                };
+            </script>
+        </body>
+        </html>
+        """
+
+        print("Loading HTML into WebView...")
+        webView?.loadHTMLString(html, baseURL: nil)
+        print("loadHTMLString called")
+    }
+
+    @MainActor
+    func renderToSVG(latex: String) async throws -> String {
+        return try await withCheckedThrowingContinuation { continuation in
+            let callback: (Result<String, Error>) -> Void = { result in
+                continuation.resume(with: result)
+            }
+
+            if !self.isReady {
+                print("WebView not ready yet, queueing render for: \(latex)")
+                self.pendingRenders.append((latex: latex, callback: callback))
+                return
+            }
+
+            self.executeRender(latex: latex, completion: callback)
+        }
+    }
+
+    @MainActor
+    func renderToSVGDirect(latex: String, displayMode: Bool = true) async throws -> String {
+        // Render to SVG using MathJax
+        return try await renderToSVGInternal(latex: latex, displayMode: displayMode)
+    }
+
+    @MainActor
+    func renderToPDF(latex: String, displayMode: Bool = true) async throws -> Data {
+        // Render to SVG using MathJax, then convert SVG to PDF using WebKit
+        let svgString = try await renderToSVGInternal(latex: latex, displayMode: displayMode)
+
+        // Use WebKit to render SVG to PDF (preserves vector graphics)
+        return try await convertSVGToPDFWithWebKit(svgString: svgString, latex: latex)
+    }
+
+    @MainActor
+    private func renderToSVGInternal(latex: String, displayMode: Bool) async throws -> String {
+        return try await withCheckedThrowingContinuation { continuation in
+            let escapedLatex = latex
+                .replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "'", with: "\\'")
+                .replacingOccurrences(of: "\n", with: "\\\\n")
+
+            // Create a unique callback name for this render
+            let callbackName = "callback_\(UUID().uuidString.replacingOccurrences(of: "-", with: "_"))"
+
+            // Create a completion handler that will be called from JavaScript
+            let messageHandler = WKScriptMessageHandlerWrapper { [weak self] message in
+                guard let self = self else { return }
+
+                if let svgString = message.body as? String {
+                    print("Received SVG from JavaScript, length: \(svgString.count)")
+                    continuation.resume(returning: svgString)
+                } else if let error = message.body as? String {
+                    continuation.resume(throwing: NSError(domain: "MathRenderer", code: -1, userInfo: [NSLocalizedDescriptionKey: error]))
+                } else {
+                    continuation.resume(throwing: NSError(domain: "MathRenderer", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid result from JavaScript"]))
+                }
+                // Remove the handler after use
+                self.webView?.configuration.userContentController.removeScriptMessageHandler(forName: callbackName)
+                self.messageHandlers.removeValue(forKey: callbackName)
+            }
+
+            // Store the wrapper to keep it alive
+            messageHandlers[callbackName] = messageHandler
+            webView?.configuration.userContentController.add(messageHandler, name: callbackName)
+
+            // Call the async function and send result back through the message handler
+            let js = """
+            (async function() {
+                try {
+                    const result = await renderToSVG('\(escapedLatex)', \(displayMode));
+                    window.webkit.messageHandlers.\(callbackName).postMessage(result);
+                } catch (e) {
+                    window.webkit.messageHandlers.\(callbackName).postMessage('Error: ' + e.message);
+                }
+            })();
+            """
+
+            webView?.evaluateJavaScript(js) { [weak self] _, error in
+                if let error = error {
+                    print("JavaScript evaluation error (may be spurious for async code): \(error)")
+                    // Note: evaluateJavaScript may report an error for async code that returns a Promise
+                    // We rely on the message handler to get the actual result
+                }
+            }
+
+            // Add a timeout in case the message handler is never called
+            DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) { [weak self] in
+                guard let self = self else { return }
+                if self.messageHandlers[callbackName] != nil {
+                    print("Timeout waiting for JavaScript result")
+                    self.webView?.configuration.userContentController.removeScriptMessageHandler(forName: callbackName)
+                    self.messageHandlers.removeValue(forKey: callbackName)
+                    continuation.resume(throwing: NSError(domain: "MathRenderer", code: -1, userInfo: [NSLocalizedDescriptionKey: "Timeout waiting for rendering"]))
+                }
+            }
+        }
+    }
+
+    @MainActor
+    private func convertSVGToPDFWithWebKit(svgString: String, latex: String) async throws -> Data {
+        return try await withCheckedThrowingContinuation { continuation in
+            // Create a temporary WKWebView for PDF rendering
+            let config = WKWebViewConfiguration()
+            let pdfWebView = WKWebView(frame: .zero, configuration: config)
+
+            // Create HTML wrapper for the SVG
+            let html = """
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <style>
+                    body { margin: 0; padding: 0; }
+                    svg { display: block; }
+                </style>
+            </head>
+            <body>
+            \(svgString)
+            </body>
+            </html>
+            """
+
+            // Load the HTML
+            pdfWebView.loadHTMLString(html, baseURL: nil)
+
+            // Wait for load to complete, then create PDF
+            class PDFDelegate: NSObject, WKNavigationDelegate {
+                let continuation: CheckedContinuation<Data, Error>
+                let webView: WKWebView
+                let latex: String
+
+                init(continuation: CheckedContinuation<Data, Error>, webView: WKWebView, latex: String) {
+                    self.continuation = continuation
+                    self.webView = webView
+                    self.latex = latex
+                    super.init()
+                }
+
+                func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+                    // Wait a moment for rendering to complete
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        // Get the actual content size
+                        webView.evaluateJavaScript("document.body.scrollWidth") { width, _ in
+                            webView.evaluateJavaScript("document.body.scrollHeight") { height, _ in
+                                let w = (width as? CGFloat) ?? 800
+                                let h = (height as? CGFloat) ?? 600
+
+                                print("WebView content size: \(w) x \(h)")
+
+                                // Create PDF from the WebView with proper size
+                                let config = WKPDFConfiguration()
+                                config.rect = CGRect(x: 0, y: 0, width: w, height: h)
+
+                                webView.createPDF(configuration: config) { result in
+                                    switch result {
+                                    case .success(let pdfData):
+                                        print("PDF created successfully, size: \(pdfData.count) bytes")
+
+                                        // Add annotation with LaTeX metadata
+                                        guard let pdfDocument = PDFDocument(data: pdfData),
+                                              let firstPage = pdfDocument.page(at: 0) else {
+                                            print("Failed to parse created PDF")
+                                            self.continuation.resume(returning: pdfData)
+                                            return
+                                        }
+
+                                        // Create an annotation with the LaTeX content
+                                        let annotation = PDFAnnotation(bounds: CGRect.zero, forType: .text, withProperties: nil)
+                                        annotation.contents = "TeXClipper:\(self.latex)"
+                                        firstPage.addAnnotation(annotation)
+
+                                        // Return the modified PDF
+                                        if let annotatedPDFData = pdfDocument.dataRepresentation() {
+                                            print("Added LaTeX annotation to PDF")
+                                            self.continuation.resume(returning: annotatedPDFData)
+                                        } else {
+                                            print("Failed to get data representation of annotated PDF")
+                                            self.continuation.resume(returning: pdfData)
+                                        }
+
+                                    case .failure(let error):
+                                        print("PDF creation failed: \(error)")
+                                        self.continuation.resume(throwing: error)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+                    self.continuation.resume(throwing: error)
+                }
+            }
+
+            let delegate = PDFDelegate(continuation: continuation, webView: pdfWebView, latex: latex)
+            pdfWebView.navigationDelegate = delegate
+
+            // Keep delegate alive with associated object
+            objc_setAssociatedObject(pdfWebView, "delegate", delegate, .OBJC_ASSOCIATION_RETAIN)
+        }
+    }
+
+    private func executeRender(latex: String, completion: @escaping (Result<String, Error>) -> Void) {
+        let escapedLatex = latex
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "'", with: "\\'")
+            .replacingOccurrences(of: "\n", with: "\\\\n")
+
+        // MathJax renderToSVG returns a Promise, so we need to handle it asynchronously
+        let js = "renderToSVG('\(escapedLatex)', true)"
+
+        // Must call evaluateJavaScript on main thread - already on main thread from caller
+        self.webView?.evaluateJavaScript(js) { result, error in
+            if let error = error {
+                completion(.failure(error))
+            } else if let svg = result as? String {
+                completion(.success(svg))
+            } else {
+                completion(.failure(NSError(domain: "MathRenderer", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid result from renderer"])))
+            }
+        }
+    }
+
+    func extractLatexFromSVG(_ svg: String) -> String? {
+        guard let metadataRange = svg.range(of: "<metadata>.*?</metadata>", options: .regularExpression) else {
+            return nil
+        }
+
+        let metadata = String(svg[metadataRange])
+        guard let contentRange = metadata.range(of: "(?<=<metadata>).*?(?=</metadata>)", options: .regularExpression) else {
+            return nil
+        }
+
+        let jsonString = String(metadata[contentRange])
+        guard let data = jsonString.data(using: .utf8),
+              let dict = try? JSONSerialization.jsonObject(with: data) as? [String: String],
+              let latex = dict["latex"] else {
+            return nil
+        }
+
+        return latex
+    }
+}
+
+extension MathRenderer: WKNavigationDelegate {
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        print("MathJax WebView loaded successfully")
+        isReady = true
+        print("Pending renders count: \(pendingRenders.count)")
+
+        // Execute any pending renders that were queued before webview was ready
+        for pending in pendingRenders {
+            executeRender(latex: pending.latex, completion: pending.callback)
+        }
+        pendingRenders.removeAll()
+    }
+
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        print("WebView navigation failed: \(error.localizedDescription)")
+    }
+
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        print("WebView provisional navigation failed: \(error.localizedDescription)")
+    }
+}
+
+extension MathRenderer: WKScriptMessageHandler {
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        print("Script message received: \(message.name) = \(message.body)")
+        if message.name == "ready" {
+            print("Ready message received, setting isReady = true")
+            isReady = true
+        }
+    }
+}
+
+extension MathRenderer: WKUIDelegate {
+    func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping () -> Void) {
+        print("[JS Alert] \(message)")
+        completionHandler()
+    }
+
+}
