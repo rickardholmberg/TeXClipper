@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct ContentView: View {
-    @State private var testLatex = "$\\int_0^\\infty \\frac{1}{1+\\zeta}\\mathrm{d}\\zeta$"
+    @State private var testLatex = "\\int_0^\\infty \\frac{1}{1+\\zeta}\\mathrm{d}\\zeta"
     @State private var renderResult = ""
     @State private var isLoading = false
 
@@ -97,7 +97,7 @@ struct ContentView: View {
         Task {
             do {
                 let renderer = MathRenderer.shared
-                let svg = try await renderer.renderToSVG(latex: testLatex)
+                let svg = try await renderer.renderToSVGDirect(latex: testLatex, displayMode: true)
                 await MainActor.run {
                     renderResult = String(svg.prefix(500)) + (svg.count > 500 ? "..." : "")
                     isLoading = false
