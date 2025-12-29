@@ -33,18 +33,15 @@ class MathRenderer: NSObject {
     private func setupWebView() {
         let config = WKWebViewConfiguration()
 
-        // These preferences might help with loading
-        if #available(macOS 11.0, *) {
-            config.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
-        }
-
         // Register message handler for ready callback
         config.userContentController.add(self, name: "ready")
 
-        // Enable JavaScript console logging
+        // Enable JavaScript console logging (DEBUG builds only for security)
+        #if DEBUG
         if #available(macOS 11.0, *) {
             config.preferences.setValue(true, forKey: "developerExtrasEnabled")
         }
+        #endif
 
         webView = WKWebView(frame: .zero, configuration: config)
         webView?.navigationDelegate = self
@@ -188,10 +185,12 @@ class MathRenderer: NSObject {
     @MainActor
     private func renderToSVGInternal(latex: String, displayMode: Bool) async throws -> String {
         return try await withCheckedThrowingContinuation { continuation in
-            let escapedLatex = latex
-                .replacingOccurrences(of: "\\", with: "\\\\")
-                .replacingOccurrences(of: "'", with: "\\'")
-                .replacingOccurrences(of: "\n", with: "\\\\n")
+            // Use JSON encoding for safe parameter passing (prevents JavaScript injection)
+            guard let latexData = try? JSONEncoder().encode(latex),
+                  let latexJSON = String(data: latexData, encoding: .utf8) else {
+                continuation.resume(throwing: NSError(domain: "MathRenderer", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to encode LaTeX as JSON"]))
+                return
+            }
 
             // Create a unique callback name for this render
             let callbackName = "callback_\(UUID().uuidString.replacingOccurrences(of: "-", with: "_"))"
@@ -218,10 +217,12 @@ class MathRenderer: NSObject {
             webView?.configuration.userContentController.add(messageHandler, name: callbackName)
 
             // Call the async function and send result back through the message handler
+            // latexJSON is already a properly escaped JSON string literal, so we can use it directly
             let js = """
             (async function() {
                 try {
-                    const result = await renderToSVG('\(escapedLatex)', \(displayMode));
+                    const latex = \(latexJSON);
+                    const result = await renderToSVG(latex, \(displayMode));
                     window.webkit.messageHandlers.\(callbackName).postMessage(result);
                 } catch (e) {
                     window.webkit.messageHandlers.\(callbackName).postMessage('Error: ' + e.message);
@@ -356,13 +357,16 @@ class MathRenderer: NSObject {
     }
 
     private func executeRender(latex: String, completion: @escaping (Result<String, Error>) -> Void) {
-        let escapedLatex = latex
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "'", with: "\\'")
-            .replacingOccurrences(of: "\n", with: "\\\\n")
+        // Use JSON encoding for safe parameter passing (prevents JavaScript injection)
+        guard let latexData = try? JSONEncoder().encode(latex),
+              let latexJSON = String(data: latexData, encoding: .utf8) else {
+            completion(.failure(NSError(domain: "MathRenderer", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to encode LaTeX as JSON"])))
+            return
+        }
 
         // MathJax renderToSVG returns a Promise, so we need to handle it asynchronously
-        let js = "renderToSVG('\(escapedLatex)', true)"
+        // latexJSON is already a properly escaped JSON string literal, so we can use it directly
+        let js = "(async function() { const latex = \(latexJSON); return await renderToSVG(latex, true); })()"
 
         // Must call evaluateJavaScript on main thread - already on main thread from caller
         self.webView?.evaluateJavaScript(js) { result, error in
