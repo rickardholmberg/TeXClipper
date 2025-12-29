@@ -91,6 +91,10 @@ struct ContentView: View {
                 Divider()
                     .padding(.vertical, 4)
 
+                Text("Version \(AppVersion.version)")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+
                 Text("Licensed under Apache License 2.0")
                     .font(.caption2)
                     .foregroundColor(.secondary)

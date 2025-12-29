@@ -13,6 +13,7 @@
 		AA0007 /* MathRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0008 /* MathRenderer.swift */; };
 		AA0009 /* ShortcutManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0010 /* ShortcutManager.swift */; };
 		AA0011 /* ClipboardManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0012 /* ClipboardManager.swift */; };
+		C988B9382F02884D00D902F0 /* Version.swift in Sources */ = {isa = PBXBuildFile; fileRef = C988B9372F02884D00D902F0 /* Version.swift */; };
 		C9EEA1A72F01A170008FD847 /* mathjax-tex-svg.js in Resources */ = {isa = PBXBuildFile; fileRef = C9EEA1A62F01A170008FD847 /* mathjax-tex-svg.js */; };
 /* End PBXBuildFile section */
 
@@ -35,6 +36,7 @@
 		AA0012 /* ClipboardManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardManager.swift; sourceTree = "<group>"; };
 		AA0017 /* TeXClipper.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TeXClipper.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA0018 /* TeXClipper.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = TeXClipper.entitlements; sourceTree = "<group>"; };
+		C988B9372F02884D00D902F0 /* Version.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Version.swift; sourceTree = "<group>"; };
 		C9EEA1A62F01A170008FD847 /* mathjax-tex-svg.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = "mathjax-tex-svg.js"; sourceTree = "<group>"; };
 		C9EEA1AC2F01F0B5008FD847 /* TeXClipperTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TeXClipperTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -73,6 +75,7 @@
 		AA0021 /* TeXClipper */ = {
 			isa = PBXGroup;
 			children = (
+				C988B9372F02884D00D902F0 /* Version.swift */,
 				AA0018 /* TeXClipper.entitlements */,
 				AA0002 /* TeXClipperApp.swift */,
 				AA0004 /* ContentView.swift */,
@@ -117,6 +120,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = AA0026 /* Build configuration list for PBXNativeTarget "TeXClipper" */;
 			buildPhases = (
+				C988B9342F02818800D902F0 /* Generate Version */,
 				AA0027 /* Sources */,
 				AA0019 /* Frameworks */,
 				AA0028 /* Resources */,
@@ -210,6 +214,29 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		C988B9342F02818800D902F0 /* Generate Version */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 12;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Generate Version";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(SRCROOT)/TeXClipper/Version.swift",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Get git version\nGIT_VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo \"dev\")\n\n# Write to Info.plist using PlistBuddy\n/usr/libexec/PlistBuddy -c \"Set :CFBundleShortVersionString $GIT_VERSION\" \"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}\"\n\n# Also update our Swift file\nOUTPUT_FILE=\"${SRCROOT}/TeXClipper/Version.swift\"\ncat > \"$OUTPUT_FILE\" << EOF\n// This file is auto-generated. Do not edit manually.\n// Generated at build time from git describe --tags --dirty\n\nstruct AppVersion {\n    static let version = \"$GIT_VERSION\"\n}\nEOF\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		AA0027 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -219,6 +246,7 @@
 				AA0003 /* ContentView.swift in Sources */,
 				AA0007 /* MathRenderer.swift in Sources */,
 				AA0009 /* ShortcutManager.swift in Sources */,
+				C988B9382F02884D00D902F0 /* Version.swift in Sources */,
 				AA0011 /* ClipboardManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -370,6 +398,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "";
 				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -396,6 +425,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "";
 				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
