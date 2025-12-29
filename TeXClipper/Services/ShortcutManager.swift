@@ -177,9 +177,9 @@ class ShortcutManager {
     }
 
     private func registerShortcuts() {
-        var renderHotKeyID = EventHotKeyID(signature: 0x52454E44, id: 1) // 'REND'
-        var renderInlineHotKeyID = EventHotKeyID(signature: 0x52454E49, id: 2) // 'RENI'
-        var revertHotKeyID = EventHotKeyID(signature: 0x52455645, id: 3) // 'REVE'
+        let renderHotKeyID = EventHotKeyID(signature: 0x52454E44, id: 1) // 'REND'
+        let renderInlineHotKeyID = EventHotKeyID(signature: 0x52454E49, id: 2) // 'RENI'
+        let revertHotKeyID = EventHotKeyID(signature: 0x52455645, id: 3) // 'REVE'
 
         let renderShortcut = getRenderShortcut()
         let renderInlineShortcut = getRenderInlineShortcut()
