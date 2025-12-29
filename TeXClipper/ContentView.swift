@@ -2,9 +2,6 @@ import SwiftUI
 import Carbon
 
 struct ContentView: View {
-    @State private var testLatex = "\\int_0^\\infty \\frac{1}{1+\\zeta}\\mathrm{d}\\zeta"
-    @State private var renderResult = ""
-    @State private var isLoading = false
     @State private var recordingShortcut: ShortcutType? = nil
     @State private var renderShortcut: ShortcutConfig
     @State private var renderInlineShortcut: ShortcutConfig
@@ -104,37 +101,6 @@ struct ContentView: View {
                 }
             ))
 
-            GroupBox(label: Text("Test Renderer")) {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Enter LaTeX:")
-                    TextEditor(text: $testLatex)
-                        .font(.system(.body, design: .monospaced))
-                        .frame(height: 60)
-                        .border(Color.gray.opacity(0.3))
-
-                    Button(action: testRender) {
-                        if isLoading {
-                            ProgressView()
-                                .scaleEffect(0.7)
-                                .frame(width: 100)
-                        } else {
-                            Text("Test Render")
-                                .frame(width: 100)
-                        }
-                    }
-                    .disabled(isLoading)
-
-                    if !renderResult.isEmpty {
-                        Text("Result:")
-                        TextEditor(text: .constant(renderResult))
-                            .font(.system(.caption, design: .monospaced))
-                            .frame(height: 100)
-                            .border(Color.gray.opacity(0.3))
-                    }
-                }
-                .padding()
-            }
-
             Spacer()
 
             VStack(spacing: 4) {
@@ -161,26 +127,7 @@ struct ContentView: View {
             .padding(.bottom)
         }
         .padding()
-        .frame(width: 500, height: 550)
-    }
-
-    private func testRender() {
-        isLoading = true
-        Task {
-            do {
-                let renderer = MathRenderer.shared
-                let svg = try await renderer.renderToSVGDirect(latex: testLatex, displayMode: true)
-                await MainActor.run {
-                    renderResult = String(svg.prefix(500)) + (svg.count > 500 ? "..." : "")
-                    isLoading = false
-                }
-            } catch {
-                await MainActor.run {
-                    renderResult = "Error: \(error.localizedDescription)"
-                    isLoading = false
-                }
-            }
-        }
+        .frame(width: 500, height: 350)
     }
 }
 
