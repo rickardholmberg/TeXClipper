@@ -1,6 +1,7 @@
 import Foundation
 import AppKit
 import PDFKit
+import ApplicationServices
 
 extension NSImage {
     var pngRepresentation: Data? {
@@ -34,6 +35,32 @@ class ClipboardManager {
         }
     }
 
+    /// Perform a copy operation by posting a copy event
+    private func performCopy() {
+        // Create a copy event (Cmd+C) using CGEvent
+        let copyEvent = CGEvent(keyboardEventSource: nil, virtualKey: 0x08, keyDown: true) // 'C' key
+        copyEvent?.flags = .maskCommand
+        copyEvent?.post(tap: .cghidEventTap)
+
+        let copyEventUp = CGEvent(keyboardEventSource: nil, virtualKey: 0x08, keyDown: false)
+        copyEventUp?.post(tap: .cghidEventTap)
+
+        print("Posted copy event")
+    }
+
+    /// Perform a paste operation by posting a paste event
+    private func performPaste() {
+        // Create a paste event (Cmd+V) using CGEvent
+        let pasteEvent = CGEvent(keyboardEventSource: nil, virtualKey: 0x09, keyDown: true) // 'V' key
+        pasteEvent?.flags = .maskCommand
+        pasteEvent?.post(tap: .cghidEventTap)
+
+        let pasteEventUp = CGEvent(keyboardEventSource: nil, virtualKey: 0x09, keyDown: false)
+        pasteEventUp?.post(tap: .cghidEventTap)
+
+        print("Posted paste event")
+    }
+
     func convertSelectionToSVG(displayMode: Bool = true) async {
         let selectedText = await getSelectedText()
 
@@ -64,19 +91,8 @@ class ClipboardManager {
             // Save old clipboard contents
             let oldContents = pasteboard.string(forType: .string)
 
-            let source = CGEventSource(stateID: .combinedSessionState)
-            guard let source = source else {
-                print("Failed to create CGEventSource for revert")
-                return
-            }
-
-            // Simulate Cmd+C to copy selection
-            if let cmdCDown = CGEvent(keyboardEventSource: source, virtualKey: 0x08, keyDown: true),
-               let cmdCUp = CGEvent(keyboardEventSource: source, virtualKey: 0x08, keyDown: false) {
-                cmdCDown.flags = .maskCommand
-                cmdCDown.post(tap: .cghidEventTap)
-                cmdCUp.post(tap: .cghidEventTap)
-            }
+            // Copy selection to clipboard
+            performCopy()
 
             Thread.sleep(forTimeInterval: 0.3)
 
@@ -137,12 +153,7 @@ class ClipboardManager {
                     pasteboard.setData(rtfdData, forType: .rtfd)
 
                     // Paste it
-                    if let cmdVDown = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true),
-                       let cmdVUp = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: false) {
-                        cmdVDown.flags = .maskCommand
-                        cmdVDown.post(tap: .cghidEventTap)
-                        cmdVUp.post(tap: .cghidEventTap)
-                    }
+                    performPaste()
 
                     Thread.sleep(forTimeInterval: 0.2)
                     print("Successfully reverted to LaTeX (RTFD)")
@@ -154,12 +165,7 @@ class ClipboardManager {
                 pasteboard.setString(resultText, forType: .string)
 
                 // Paste it
-                if let cmdVDown = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true),
-                   let cmdVUp = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: false) {
-                    cmdVDown.flags = .maskCommand
-                    cmdVDown.post(tap: .cghidEventTap)
-                    cmdVUp.post(tap: .cghidEventTap)
-                }
+                performPaste()
 
                 Thread.sleep(forTimeInterval: 0.2)
                 print("Successfully reverted to LaTeX (plain text)")
@@ -187,33 +193,8 @@ class ClipboardManager {
             print("Old clipboard contents: \(oldContents ?? "nil")")
             print("Old change count: \(oldChangeCount)")
 
-            // DON'T clear clipboard before copying - let the app handle it
-            // pasteboard.clearContents()
-            print("Current change count: \(pasteboard.changeCount)")
-
-            // Create and post Cmd+C event
-            let source = CGEventSource(stateID: .combinedSessionState)
-
-            guard let source = source else {
-                print("Failed to create CGEventSource")
-                return ""
-            }
-
-            // Create key events
-            guard let cmdCDown = CGEvent(keyboardEventSource: source, virtualKey: 0x08, keyDown: true),
-                  let cmdCUp = CGEvent(keyboardEventSource: source, virtualKey: 0x08, keyDown: false) else {
-                print("Failed to create CGEvent")
-                return ""
-            }
-
-            cmdCDown.flags = .maskCommand
-            cmdCUp.flags = []
-
-            // Post to HID event tap
-            cmdCDown.post(tap: .cghidEventTap)
-            cmdCUp.post(tap: .cghidEventTap)
-
-            print("Posted Cmd+C event")
+            // Copy selection to clipboard
+            performCopy()
 
             // Wait for clipboard to update
             Thread.sleep(forTimeInterval: 0.3)
@@ -251,21 +232,8 @@ class ClipboardManager {
             pasteboard.clearContents()
             pasteboard.setString(text, forType: .string)
 
-            // Create and post Cmd+V event
-            let source = CGEventSource(stateID: .hidSystemState)
-
-            // Key down
-            if let cmdVDown = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true) {
-                cmdVDown.flags = .maskCommand
-                cmdVDown.post(tap: .cghidEventTap)
-            }
-
-            // Key up
-            if let cmdVUp = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: false) {
-                cmdVUp.post(tap: .cghidEventTap)
-            }
-
-            print("Posted Cmd+V event")
+            // Paste it
+            performPaste()
 
             // Wait for paste to complete
             Thread.sleep(forTimeInterval: 0.2)
@@ -309,21 +277,8 @@ class ClipboardManager {
 
             print("SVG added to pasteboard")
 
-            // Create and post Cmd+V event
-            let source = CGEventSource(stateID: .hidSystemState)
-
-            // Key down
-            if let cmdVDown = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true) {
-                cmdVDown.flags = .maskCommand
-                cmdVDown.post(tap: .cghidEventTap)
-            }
-
-            // Key up
-            if let cmdVUp = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: false) {
-                cmdVUp.post(tap: .cghidEventTap)
-            }
-
-            print("Posted Cmd+V event for SVG")
+            // Paste it
+            performPaste()
 
             // Wait for paste to complete
             Thread.sleep(forTimeInterval: 0.2)
@@ -364,19 +319,8 @@ class ClipboardManager {
 
             print("PDF and SVG added to pasteboard")
 
-            // Create and post Cmd+V event
-            let source = CGEventSource(stateID: .hidSystemState)
-
-            if let cmdVDown = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true) {
-                cmdVDown.flags = .maskCommand
-                cmdVDown.post(tap: .cghidEventTap)
-            }
-
-            if let cmdVUp = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: false) {
-                cmdVUp.post(tap: .cghidEventTap)
-            }
-
-            print("Posted Cmd+V event for PDF+SVG")
+            // Paste it
+            performPaste()
 
             Thread.sleep(forTimeInterval: 0.2)
 
