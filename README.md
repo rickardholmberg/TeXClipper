@@ -75,7 +75,7 @@ open TeXClipper.xcodeproj
 
 ## Requirements
 
-- macOS 13.0 or later
+- macOS 14.0 or later
 - Accessibility permissions (for global keyboard shortcuts)
 
 ## Technical Details
