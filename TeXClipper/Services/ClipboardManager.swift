@@ -410,7 +410,7 @@ class ClipboardManager {
         }
     }
 
-    private func extractAllLatexFromRTFD(_ rtfdData: Data) -> String? {
+    func extractAllLatexFromRTFD(_ rtfdData: Data) -> String? {
         // RTFD is a wrapper format that can contain file attachments
         // Try to parse it as an NSAttributedString to access attachments
         guard let attributedString = try? NSAttributedString(data: rtfdData,

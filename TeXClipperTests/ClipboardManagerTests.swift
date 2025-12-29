@@ -213,4 +213,201 @@ final class ClipboardManagerTests: XCTestCase {
         XCTAssertNotNil(extractedLatex, "Should extract LaTeX from SVG")
         XCTAssertEqual(extractedLatex, originalLatex, "Round-trip should preserve LaTeX exactly")
     }
+
+    // MARK: - Multiple Image Revert Tests
+
+    func testMultipleImagesWithNonLatexImageContents() async throws {
+        // This test replicates the bug using attachment.contents instead of fileWrapper
+        // Some apps might paste images without file wrappers
+
+        let firstLatex = "x^2 + y^2 = z^2"
+        let secondLatex = "\\int_0^\\infty e^{-x} dx"
+
+        // Render both LaTeX expressions to PDF
+        let firstPDF = try await renderer.renderToPDF(latex: firstLatex, displayMode: true)
+        let secondPDF = try await renderer.renderToPDF(latex: secondLatex, displayMode: true)
+
+        // Create a non-LaTeX image (simple red square "duck")
+        let duckSize = NSSize(width: 100, height: 100)
+        let duckImage = NSImage(size: duckSize)
+        duckImage.lockFocus()
+        NSColor.red.setFill()
+        NSRect(origin: .zero, size: duckSize).fill()
+        duckImage.unlockFocus()
+
+        // Convert duck to PNG data
+        guard let duckPNG = duckImage.pngRepresentation else {
+            XCTFail("Failed to create duck PNG")
+            return
+        }
+
+        // Build an attributed string with multiple attachments:
+        // [LaTeX PDF] [Duck PNG via contents] [Text] [LaTeX PDF]
+        let attributedString = NSMutableAttributedString()
+
+        // Add first LaTeX attachment
+        let firstAttachment = NSTextAttachment()
+        let firstWrapper = FileWrapper(regularFileWithContents: firstPDF)
+        firstWrapper.preferredFilename = "math1.pdf"
+        firstAttachment.fileWrapper = firstWrapper
+        attributedString.append(NSAttributedString(attachment: firstAttachment))
+
+        // Add duck attachment using contents instead of fileWrapper
+        let duckAttachment = NSTextAttachment()
+        duckAttachment.contents = duckPNG
+        attributedString.append(NSAttributedString(attachment: duckAttachment))
+
+        // Add some text
+        attributedString.append(NSAttributedString(string: " some text "))
+
+        // Add second LaTeX attachment
+        let secondAttachment = NSTextAttachment()
+        let secondWrapper = FileWrapper(regularFileWithContents: secondPDF)
+        secondWrapper.preferredFilename = "math2.pdf"
+        secondAttachment.fileWrapper = secondWrapper
+        attributedString.append(NSAttributedString(attachment: secondAttachment))
+
+        // Convert to RTFD data
+        guard let rtfdData = try? attributedString.data(from: NSRange(location: 0, length: attributedString.length),
+                                                        documentAttributes: [.documentType: NSAttributedString.DocumentType.rtfd]) else {
+            XCTFail("Failed to create RTFD data")
+            return
+        }
+
+        // Extract all LaTeX from the RTFD
+        guard let result = clipboardManager.extractAllLatexFromRTFD(rtfdData) else {
+            XCTFail("Failed to extract LaTeX from RTFD")
+            return
+        }
+
+        // Debug: Print detailed result info
+        print("=== RESULT ANALYSIS ===")
+        print("Result: \(result)")
+        print("Result length: \(result.count)")
+        print("First LaTeX (\(firstLatex)): contains = \(result.contains(firstLatex))")
+        print("Second LaTeX (\(secondLatex)): contains = \(result.contains(secondLatex))")
+        print("Text ' some text ': contains = \(result.contains(" some text "))")
+
+        let objectReplacementChar = "\u{FFFC}"
+        let duckCount = result.components(separatedBy: objectReplacementChar).count - 1
+        let firstLatexCount = result.components(separatedBy: firstLatex).count - 1
+
+        print("Object replacement character count: \(duckCount)")
+        print("First LaTeX occurrence count: \(firstLatexCount)")
+        print("=== END ANALYSIS ===")
+
+        // The result should contain both LaTeX expressions
+        XCTAssertTrue(result.contains(firstLatex), "Should contain first LaTeX: \(firstLatex). Result: \(result)")
+        XCTAssertTrue(result.contains(secondLatex), "Should contain second LaTeX: \(secondLatex). Result: \(result)")
+        XCTAssertTrue(result.contains(" some text "), "Should preserve text between images. Result: \(result)")
+
+        // The duck should be represented as object replacement character (U+FFFC)
+        XCTAssertEqual(duckCount, 1, "Should have exactly one object replacement character for the duck image. Found \(duckCount). Result: \(result)")
+
+        // The first LaTeX should NOT appear twice (bug check)
+        XCTAssertEqual(firstLatexCount, 1, "First LaTeX should appear exactly once, not replace the duck image. Found \(firstLatexCount) times. Result: \(result)")
+    }
+
+    func testMultipleImagesWithNonLatexImage() async throws {
+        // This test replicates the bug where:
+        // - Document has: [LaTeX image, Duck image, text, LaTeX image]
+        // - Reverting should convert LaTeX images to source but preserve duck image
+        // - Bug: Duck image gets replaced with first LaTeX image's source
+
+        let firstLatex = "x^2 + y^2 = z^2"
+        let secondLatex = "\\int_0^\\infty e^{-x} dx"
+
+        // Render both LaTeX expressions to PDF
+        let firstPDF = try await renderer.renderToPDF(latex: firstLatex, displayMode: true)
+        let secondPDF = try await renderer.renderToPDF(latex: secondLatex, displayMode: true)
+
+        // Create a non-LaTeX image (simple red square "duck")
+        let duckSize = NSSize(width: 100, height: 100)
+        let duckImage = NSImage(size: duckSize)
+        duckImage.lockFocus()
+        NSColor.red.setFill()
+        NSRect(origin: .zero, size: duckSize).fill()
+        duckImage.unlockFocus()
+
+        // Convert duck to PNG data
+        guard let duckPNG = duckImage.pngRepresentation else {
+            XCTFail("Failed to create duck PNG")
+            return
+        }
+
+        // Build an attributed string with multiple attachments:
+        // [LaTeX PDF] [Duck PNG] [Text] [LaTeX PDF]
+        let attributedString = NSMutableAttributedString()
+
+        // Add first LaTeX attachment
+        let firstAttachment = NSTextAttachment()
+        let firstWrapper = FileWrapper(regularFileWithContents: firstPDF)
+        firstWrapper.preferredFilename = "math1.pdf"
+        firstAttachment.fileWrapper = firstWrapper
+        attributedString.append(NSAttributedString(attachment: firstAttachment))
+
+        // Add duck attachment (non-LaTeX image)
+        let duckAttachment = NSTextAttachment()
+        let duckWrapper = FileWrapper(regularFileWithContents: duckPNG)
+        duckWrapper.preferredFilename = "duck.png"
+        duckAttachment.fileWrapper = duckWrapper
+        attributedString.append(NSAttributedString(attachment: duckAttachment))
+
+        // Add some text
+        attributedString.append(NSAttributedString(string: " some text "))
+
+        // Add second LaTeX attachment
+        let secondAttachment = NSTextAttachment()
+        let secondWrapper = FileWrapper(regularFileWithContents: secondPDF)
+        secondWrapper.preferredFilename = "math2.pdf"
+        secondAttachment.fileWrapper = secondWrapper
+        attributedString.append(NSAttributedString(attachment: secondAttachment))
+
+        // Convert to RTFD data
+        guard let rtfdData = try? attributedString.data(from: NSRange(location: 0, length: attributedString.length),
+                                                        documentAttributes: [.documentType: NSAttributedString.DocumentType.rtfd]) else {
+            XCTFail("Failed to create RTFD data")
+            return
+        }
+
+        // Extract all LaTeX from the RTFD
+        // This should:
+        // 1. Replace first attachment with "x^2 + y^2 = z^2"
+        // 2. Preserve duck image as object replacement character (U+FFFC)
+        // 3. Preserve text " some text "
+        // 4. Replace second attachment with "\\int_0^\\infty e^{-x} dx"
+        guard let result = clipboardManager.extractAllLatexFromRTFD(rtfdData) else {
+            XCTFail("Failed to extract LaTeX from RTFD")
+            return
+        }
+
+        print("Result from extractAllLatexFromRTFD: \(result)")
+        print("Result bytes: \(Array(result.utf8))")
+        print("Result characters:")
+        for (index, char) in result.enumerated() {
+            print("  [\(index)]: '\(char)' (U+\(String(format: "%04X", char.unicodeScalars.first?.value ?? 0)))")
+        }
+
+        // The result should contain:
+        // - First LaTeX source
+        // - Object replacement character for duck (U+FFFC)
+        // - The text
+        // - Second LaTeX source
+        XCTAssertTrue(result.contains(firstLatex), "Should contain first LaTeX: \(firstLatex)")
+        XCTAssertTrue(result.contains(secondLatex), "Should contain second LaTeX: \(secondLatex)")
+        XCTAssertTrue(result.contains(" some text "), "Should preserve text between images")
+
+        // The duck should be represented as object replacement character (U+FFFC)
+        let objectReplacementChar = "\u{FFFC}"
+        let duckCount = result.components(separatedBy: objectReplacementChar).count - 1
+        XCTAssertEqual(duckCount, 1, "Should have exactly one object replacement character for the duck image")
+
+        // The first LaTeX should NOT appear twice (bug check)
+        let firstLatexCount = result.components(separatedBy: firstLatex).count - 1
+        XCTAssertEqual(firstLatexCount, 1, "First LaTeX should appear exactly once, not replace the duck image")
+
+        // Check exact structure: firstLatex + ORC + text + secondLatex
+        let expected = firstLatex + objectReplacementChar + " some text " + secondLatex
+        XCTAssertEqual(result, expected, "Result should match exact expected structure")
+    }
 }
