@@ -65,6 +65,38 @@ Common refactoring patterns used in this project:
 - Method extraction for clarity
 - Enum-based type switching
 
+### Documentation
+
+**Always keep documentation in sync** when making changes:
+
+#### Files to Update
+1. **README.md** - Main user-facing documentation
+   - Update features, installation, usage instructions
+   - Keep keyboard shortcuts current
+   - Update requirements (macOS version, etc.)
+
+2. **QUICKSTART.md** - Quick start guide
+   - Sync keyboard shortcuts with README
+   - Update any UI references (menu items, settings)
+
+3. **.github/workflows/release.yml** - Release notes template
+   - Update release notes in "Create GitHub Release" step
+   - Keep keyboard shortcuts and features synchronized
+   - Update installation instructions if changed
+
+4. **CLAUDE.md** (this file) - Development guide
+   - Document new patterns or best practices
+   - Update file organization if structure changes
+   - Add new troubleshooting tips as discovered
+
+#### When to Update Documentation
+- **New features**: Document in README, update QUICKSTART if user-facing
+- **UI changes**: Update screenshots, menu descriptions, settings references
+- **Keyboard shortcuts**: Update README, QUICKSTART, release.yml template
+- **Breaking changes**: Document migration path in README and release notes
+- **Security fixes**: Consider adding to CLAUDE.md security section
+- **Build/deploy changes**: Update CI/CD and build instructions
+
 ### Git Workflow
 
 #### Commits
@@ -81,6 +113,7 @@ Common refactoring patterns used in this project:
 - Include test results in PR description
 - Document breaking changes clearly
 - Link related issues
+- **Update relevant documentation** before merging
 
 ### CI/CD Pipeline
 
