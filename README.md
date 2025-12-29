@@ -13,8 +13,10 @@ A macOS menu bar app that renders LaTeX math expressions to vector graphics with
 ## Keyboard Shortcuts
 
 - **⌘⌥K** - Render selected LaTeX in display mode
-- **⌘⌥I** - Render selected LaTeX in inline mode
+- **⌘⌥⌃K** - Render selected LaTeX in inline mode
 - **⌘⌥⇧K** - Revert rendered math back to LaTeX source
+
+All shortcuts can be customized in the Settings dialog.
 
 ## Installation
 
@@ -51,7 +53,7 @@ open TeXClipper.xcodeproj
 ### Rendering LaTeX
 
 1. Select LaTeX code in any text editor (e.g., `\int_0^\infty \frac{1}{1+x} dx`)
-2. Press **⌘⌥K** for display mode or **⌘⌥I** for inline mode
+2. Press **⌘⌥K** for display mode or **⌘⌥⌃K** for inline mode
 3. The rendered math is copied to your clipboard as a PDF
 4. Paste it into any application (TextEdit, Pages, Keynote, etc.)
 

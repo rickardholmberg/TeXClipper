@@ -38,3 +38,7 @@ Carthage/Build/
 
 # MathJax files (user must download)
 TeXClipper/Resources/
+
+# Version file is always generated at build time
+TeXClipper/Version.swift
+

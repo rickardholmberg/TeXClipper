@@ -38,8 +38,10 @@ Press `⌘⌥⇧K` to revert back to LaTeX.
 ## Keyboard Shortcuts
 
 - **⌘⌥K** - Render LaTeX (display mode)
-- **⌘⌥I** - Render LaTeX (inline mode)
+- **⌘⌥⌃K** - Render LaTeX (inline mode)
 - **⌘⌥⇧K** - Revert to LaTeX
+
+All shortcuts can be customized in Settings.
 
 ## Menu Bar
 
