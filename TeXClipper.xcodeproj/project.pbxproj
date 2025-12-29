@@ -13,6 +13,7 @@
 		AA0007 /* MathRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0008 /* MathRenderer.swift */; };
 		AA0009 /* ShortcutManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0010 /* ShortcutManager.swift */; };
 		AA0011 /* ClipboardManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0012 /* ClipboardManager.swift */; };
+		AA0013 /* LoginItemManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0014 /* LoginItemManager.swift */; };
 		C988B9382F02884D00D902F0 /* Version.swift in Sources */ = {isa = PBXBuildFile; fileRef = C988B9372F02884D00D902F0 /* Version.swift */; };
 		C9EEA1A72F01A170008FD847 /* mathjax-tex-svg.js in Resources */ = {isa = PBXBuildFile; fileRef = C9EEA1A62F01A170008FD847 /* mathjax-tex-svg.js */; };
 /* End PBXBuildFile section */
@@ -34,6 +35,7 @@
 		AA0008 /* MathRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MathRenderer.swift; sourceTree = "<group>"; };
 		AA0010 /* ShortcutManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutManager.swift; sourceTree = "<group>"; };
 		AA0012 /* ClipboardManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardManager.swift; sourceTree = "<group>"; };
+		AA0014 /* LoginItemManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginItemManager.swift; sourceTree = "<group>"; };
 		AA0017 /* TeXClipper.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TeXClipper.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA0018 /* TeXClipper.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = TeXClipper.entitlements; sourceTree = "<group>"; };
 		C988B9372F02884D00D902F0 /* Version.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Version.swift; sourceTree = "<group>"; };
@@ -101,6 +103,7 @@
 				AA0008 /* MathRenderer.swift */,
 				AA0010 /* ShortcutManager.swift */,
 				AA0012 /* ClipboardManager.swift */,
+				AA0014 /* LoginItemManager.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -250,6 +253,7 @@
 				AA0009 /* ShortcutManager.swift in Sources */,
 				C988B9382F02884D00D902F0 /* Version.swift in Sources */,
 				AA0011 /* ClipboardManager.swift in Sources */,
+				AA0013 /* LoginItemManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
