@@ -2,6 +2,8 @@
 
 A macOS menu bar app that renders LaTeX math expressions to vector graphics with reversible rendering.
 
+![TeXClipper Demo](texclipperdemo.gif)
+
 ## Features
 
 - **Vector Graphics Output**: Renders LaTeX to PDF/SVG (not rasterized images)
