@@ -253,8 +253,14 @@ final class ClipboardManagerTests: XCTestCase {
         attributedString.append(NSAttributedString(attachment: firstAttachment))
 
         // Add duck attachment using contents instead of fileWrapper
+        // Note: RTFD format requires fileWrapper for proper serialization
+        // But we want to test the case where contents is used (as some apps might do this)
         let duckAttachment = NSTextAttachment()
         duckAttachment.contents = duckPNG
+        // Also set fileWrapper so it serializes to RTFD properly
+        let duckWrapper = FileWrapper(regularFileWithContents: duckPNG)
+        duckWrapper.preferredFilename = "duck.png"
+        duckAttachment.fileWrapper = duckWrapper
         attributedString.append(NSAttributedString(attachment: duckAttachment))
 
         // Add some text
@@ -275,10 +281,12 @@ final class ClipboardManagerTests: XCTestCase {
         }
 
         // Extract all LaTeX from the RTFD
-        guard let result = clipboardManager.extractAllLatexFromRTFD(rtfdData) else {
+        guard let resultAttributedString = clipboardManager.extractAllLatexFromRTFD(rtfdData) else {
             XCTFail("Failed to extract LaTeX from RTFD")
             return
         }
+
+        let result = resultAttributedString.string
 
         // Debug: Print detailed result info
         print("=== RESULT ANALYSIS ===")
@@ -294,6 +302,16 @@ final class ClipboardManagerTests: XCTestCase {
 
         print("Object replacement character count: \(duckCount)")
         print("First LaTeX occurrence count: \(firstLatexCount)")
+
+        // Check if the duck attachment is preserved in the attributed string
+        var hasNonLatexAttachment = false
+        resultAttributedString.enumerateAttribute(.attachment, in: NSRange(location: 0, length: resultAttributedString.length), options: []) { value, range, stop in
+            if let _ = value as? NSTextAttachment {
+                hasNonLatexAttachment = true
+                print("Found preserved attachment at range \(range)")
+            }
+        }
+        print("Has non-LaTeX attachment preserved: \(hasNonLatexAttachment)")
         print("=== END ANALYSIS ===")
 
         // The result should contain both LaTeX expressions
@@ -301,8 +319,9 @@ final class ClipboardManagerTests: XCTestCase {
         XCTAssertTrue(result.contains(secondLatex), "Should contain second LaTeX: \(secondLatex). Result: \(result)")
         XCTAssertTrue(result.contains(" some text "), "Should preserve text between images. Result: \(result)")
 
-        // The duck should be represented as object replacement character (U+FFFC)
+        // The duck should be preserved as an attachment (U+FFFC in the string)
         XCTAssertEqual(duckCount, 1, "Should have exactly one object replacement character for the duck image. Found \(duckCount). Result: \(result)")
+        XCTAssertTrue(hasNonLatexAttachment, "Should preserve the non-LaTeX attachment in the attributed string")
 
         // The first LaTeX should NOT appear twice (bug check)
         XCTAssertEqual(firstLatexCount, 1, "First LaTeX should appear exactly once, not replace the duck image. Found \(firstLatexCount) times. Result: \(result)")
@@ -373,13 +392,15 @@ final class ClipboardManagerTests: XCTestCase {
         // Extract all LaTeX from the RTFD
         // This should:
         // 1. Replace first attachment with "x^2 + y^2 = z^2"
-        // 2. Preserve duck image as object replacement character (U+FFFC)
+        // 2. Preserve duck image as object replacement character (U+FFFC) with attachment
         // 3. Preserve text " some text "
         // 4. Replace second attachment with "\\int_0^\\infty e^{-x} dx"
-        guard let result = clipboardManager.extractAllLatexFromRTFD(rtfdData) else {
+        guard let resultAttributedString = clipboardManager.extractAllLatexFromRTFD(rtfdData) else {
             XCTFail("Failed to extract LaTeX from RTFD")
             return
         }
+
+        let result = resultAttributedString.string
 
         print("Result from extractAllLatexFromRTFD: \(result)")
         print("Result bytes: \(Array(result.utf8))")
@@ -401,6 +422,15 @@ final class ClipboardManagerTests: XCTestCase {
         let objectReplacementChar = "\u{FFFC}"
         let duckCount = result.components(separatedBy: objectReplacementChar).count - 1
         XCTAssertEqual(duckCount, 1, "Should have exactly one object replacement character for the duck image")
+
+        // Check that the duck attachment is actually preserved
+        var hasNonLatexAttachment = false
+        resultAttributedString.enumerateAttribute(.attachment, in: NSRange(location: 0, length: resultAttributedString.length), options: []) { value, range, stop in
+            if let _ = value as? NSTextAttachment {
+                hasNonLatexAttachment = true
+            }
+        }
+        XCTAssertTrue(hasNonLatexAttachment, "Should preserve the duck image attachment")
 
         // The first LaTeX should NOT appear twice (bug check)
         let firstLatexCount = result.components(separatedBy: firstLatex).count - 1

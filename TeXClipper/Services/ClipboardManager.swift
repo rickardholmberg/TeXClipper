@@ -81,16 +81,17 @@ class ClipboardManager {
             Thread.sleep(forTimeInterval: 0.3)
 
             // Try to extract LaTeX from all images in the selection
+            var resultAttributedString: NSAttributedString?
             var resultText: String?
 
             // First check for RTFD data (rich text with attachments) - this can contain multiple images
             if let rtfdData = pasteboard.data(forType: .rtfd) {
                 print("Found RTFD data on clipboard, extracting all LaTeX from attachments")
-                resultText = extractAllLatexFromRTFD(rtfdData)
+                resultAttributedString = extractAllLatexFromRTFD(rtfdData)
             }
 
-            // If no RTFD, try single image formats
-            if resultText == nil {
+            // If no RTFD, try single image formats (these return plain text)
+            if resultAttributedString == nil {
                 var latex: String?
 
                 // Check for our custom SVG format first (most reliable)
@@ -124,9 +125,31 @@ class ClipboardManager {
                 resultText = latex
             }
 
-            if let resultText = resultText {
+            // Paste the result (either RTFD or plain text)
+            if let resultAttributedString = resultAttributedString {
+                print("Pasting RTFD with \(resultAttributedString.length) characters")
+                // Replace selection with attributed string (preserves non-LaTeX images)
+                pasteboard.clearContents()
+
+                // Convert to RTFD data for pasting
+                if let rtfdData = try? resultAttributedString.data(from: NSRange(location: 0, length: resultAttributedString.length),
+                                                                    documentAttributes: [.documentType: NSAttributedString.DocumentType.rtfd]) {
+                    pasteboard.setData(rtfdData, forType: .rtfd)
+
+                    // Paste it
+                    if let cmdVDown = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true),
+                       let cmdVUp = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: false) {
+                        cmdVDown.flags = .maskCommand
+                        cmdVDown.post(tap: .cghidEventTap)
+                        cmdVUp.post(tap: .cghidEventTap)
+                    }
+
+                    Thread.sleep(forTimeInterval: 0.2)
+                    print("Successfully reverted to LaTeX (RTFD)")
+                }
+            } else if let resultText = resultText {
                 print("Extracted LaTeX: \(resultText)")
-                // Replace selection with LaTeX
+                // Replace selection with LaTeX (plain text)
                 pasteboard.clearContents()
                 pasteboard.setString(resultText, forType: .string)
 
@@ -139,7 +162,7 @@ class ClipboardManager {
                 }
 
                 Thread.sleep(forTimeInterval: 0.2)
-                print("Successfully reverted to LaTeX")
+                print("Successfully reverted to LaTeX (plain text)")
             } else {
                 print("Could not extract LaTeX from clipboard - no SVG metadata found")
             }
@@ -410,7 +433,7 @@ class ClipboardManager {
         }
     }
 
-    func extractAllLatexFromRTFD(_ rtfdData: Data) -> String? {
+    func extractAllLatexFromRTFD(_ rtfdData: Data) -> NSAttributedString? {
         // RTFD is a wrapper format that can contain file attachments
         // Try to parse it as an NSAttributedString to access attachments
         guard let attributedString = try? NSAttributedString(data: rtfdData,
@@ -433,16 +456,16 @@ class ClipboardManager {
 
         print("Found \(attachmentRanges.count) attachments")
 
-        // Build result by walking through the string
-        let mutableResult = NSMutableString()
+        // Build result attributed string by walking through the original
+        let mutableResult = NSMutableAttributedString()
         var currentIndex = 0
 
         for (range, attachment) in attachmentRanges {
             // Add text before this attachment
             if range.location > currentIndex {
                 let textRange = NSRange(location: currentIndex, length: range.location - currentIndex)
-                let textBefore = attributedString.attributedSubstring(from: textRange).string
-                print("Adding text before attachment at \(range.location): '\(textBefore)'")
+                let textBefore = attributedString.attributedSubstring(from: textRange)
+                print("Adding text before attachment at \(range.location): '\(textBefore.string)'")
                 mutableResult.append(textBefore)
             }
 
@@ -475,24 +498,35 @@ class ClipboardManager {
 
                 // Try to parse as SVG
                 if let svgString = String(data: imageData, encoding: .utf8) {
+                    print("Trying to extract LaTeX from SVG in contents...")
                     latex = renderer.extractLatexFromSVG(svgString)
+                    if latex != nil {
+                        print("  Successfully extracted LaTeX from SVG")
+                    }
                 }
 
                 // Try to parse as PDF
                 if latex == nil {
+                    print("Trying to extract LaTeX from PDF in contents...")
                     latex = extractLatexFromPDF(imageData)
+                    if latex != nil {
+                        print("  Successfully extracted LaTeX from PDF")
+                    } else {
+                        print("  Could not extract LaTeX from PDF - this is likely a non-LaTeX image")
+                    }
                 }
             }
 
-            // Add the extracted LaTeX or keep the original character
+            // Add the extracted LaTeX as text or keep the original attachment for non-LaTeX images
             if let latex = latex {
                 print("Extracted LaTeX from attachment: \(latex)")
-                mutableResult.append(latex)
+                mutableResult.append(NSAttributedString(string: latex))
             } else {
-                print("Could not extract LaTeX from attachment, keeping original")
-                // Keep the original text from this range
-                let originalText = attributedString.attributedSubstring(from: range).string
-                mutableResult.append(originalText)
+                print("Could not extract LaTeX from attachment, preserving original attachment")
+                let originalSubstring = attributedString.attributedSubstring(from: range)
+                print("Original substring length: \(originalSubstring.length), string: '\(originalSubstring.string)'")
+                // For non-LaTeX attachments, preserve the original attachment
+                mutableResult.append(originalSubstring)
             }
 
             currentIndex = range.location + range.length
@@ -501,14 +535,13 @@ class ClipboardManager {
         // Add any remaining text after the last attachment
         if currentIndex < length {
             let textRange = NSRange(location: currentIndex, length: length - currentIndex)
-            let textAfter = attributedString.attributedSubstring(from: textRange).string
-            print("Adding text after last attachment: '\(textAfter)'")
+            let textAfter = attributedString.attributedSubstring(from: textRange)
+            print("Adding text after last attachment: '\(textAfter.string)'")
             mutableResult.append(textAfter)
         }
 
-        let result = mutableResult as String
-        print("Final extracted text: \(result)")
-        return result.isEmpty ? nil : result
+        print("Final result has \(mutableResult.length) characters")
+        return mutableResult.length > 0 ? mutableResult : nil
     }
 
     private func extractLatexFromRTFD(_ rtfdData: Data) -> String? {
