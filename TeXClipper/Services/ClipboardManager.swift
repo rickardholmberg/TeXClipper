@@ -61,12 +61,8 @@ class ClipboardManager {
         await MainActor.run {
             let pasteboard = NSPasteboard.general
 
-            // First try to get the currently selected item by copying it
-            let oldChangeCount = pasteboard.changeCount
+            // Save old clipboard contents
             let oldContents = pasteboard.string(forType: .string)
-
-            // Clear and copy selection
-            //pasteboard.clearContents()
 
             let source = CGEventSource(stateID: .combinedSessionState)
             guard let source = source else {
@@ -74,7 +70,7 @@ class ClipboardManager {
                 return
             }
 
-            // Simulate Cmd+C
+            // Simulate Cmd+C to copy selection
             if let cmdCDown = CGEvent(keyboardEventSource: source, virtualKey: 0x08, keyDown: true),
                let cmdCUp = CGEvent(keyboardEventSource: source, virtualKey: 0x08, keyDown: false) {
                 cmdCDown.flags = .maskCommand
@@ -84,48 +80,55 @@ class ClipboardManager {
 
             Thread.sleep(forTimeInterval: 0.3)
 
-            // Try to get SVG or PDF data with embedded LaTeX
-            var latex: String?
+            // Try to extract LaTeX from all images in the selection
+            var resultText: String?
 
-            // Check for our custom SVG format first (most reliable)
-            if let svgData = pasteboard.data(forType: NSPasteboard.PasteboardType("com.TeXClipper.svg")) {
-                if let svgString = String(data: svgData, encoding: .utf8) {
-                    print("Found TeXClipper SVG data, extracting LaTeX")
-                    latex = renderer.extractLatexFromSVG(svgString)
+            // First check for RTFD data (rich text with attachments) - this can contain multiple images
+            if let rtfdData = pasteboard.data(forType: .rtfd) {
+                print("Found RTFD data on clipboard, extracting all LaTeX from attachments")
+                resultText = extractAllLatexFromRTFD(rtfdData)
+            }
+
+            // If no RTFD, try single image formats
+            if resultText == nil {
+                var latex: String?
+
+                // Check for our custom SVG format first (most reliable)
+                if let svgData = pasteboard.data(forType: NSPasteboard.PasteboardType("com.TeXClipper.svg")) {
+                    if let svgString = String(data: svgData, encoding: .utf8) {
+                        print("Found TeXClipper SVG data, extracting LaTeX")
+                        latex = renderer.extractLatexFromSVG(svgString)
+                    }
                 }
-            }
 
-            // Check for standard SVG data
-            if latex == nil, let svgData = pasteboard.data(forType: NSPasteboard.PasteboardType("public.svg-image")) {
-                if let svgString = String(data: svgData, encoding: .utf8) {
-                    print("Found public SVG data, extracting LaTeX")
-                    latex = renderer.extractLatexFromSVG(svgString)
+                // Check for standard SVG data
+                if latex == nil, let svgData = pasteboard.data(forType: NSPasteboard.PasteboardType("public.svg-image")) {
+                    if let svgString = String(data: svgData, encoding: .utf8) {
+                        print("Found public SVG data, extracting LaTeX")
+                        latex = renderer.extractLatexFromSVG(svgString)
+                    }
                 }
+
+                // Check for text (maybe it's SVG as text)
+                if latex == nil, let text = pasteboard.string(forType: .string) {
+                    print("Checking if text contains SVG")
+                    latex = renderer.extractLatexFromSVG(text)
+                }
+
+                // Check PDF directly
+                if latex == nil, let pdfData = pasteboard.data(forType: .pdf) {
+                    print("Found PDF data on clipboard, extracting PDF data")
+                    latex = extractLatexFromPDF(pdfData)
+                }
+
+                resultText = latex
             }
 
-            // Check for text (maybe it's SVG as text)
-            if latex == nil, let text = pasteboard.string(forType: .string) {
-                print("Checking if text contains SVG")
-                latex = renderer.extractLatexFromSVG(text)
-            }
-
-            // Check for RTFD data (rich text with attachments)
-            if latex == nil, let rtfdData = pasteboard.data(forType: .rtfd) {
-                print("Found RTFD data on clipboard, extracting attachments")
-                latex = extractLatexFromRTFD(rtfdData)
-            }
-
-            // If still no luck, check PDF directly
-            if latex == nil, let pdfData = pasteboard.data(forType: .pdf) {
-                print("Found PDF data on clipboard, extracting PDF data")
-                latex = extractLatexFromPDF(pdfData)
-            }
-
-            if let latex = latex {
-                print("Extracted LaTeX: \(latex)")
+            if let resultText = resultText {
+                print("Extracted LaTeX: \(resultText)")
                 // Replace selection with LaTeX
                 pasteboard.clearContents()
-                pasteboard.setString(latex, forType: .string)
+                pasteboard.setString(resultText, forType: .string)
 
                 // Paste it
                 if let cmdVDown = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true),
@@ -407,7 +410,109 @@ class ClipboardManager {
         }
     }
 
+    private func extractAllLatexFromRTFD(_ rtfdData: Data) -> String? {
+        // RTFD is a wrapper format that can contain file attachments
+        // Try to parse it as an NSAttributedString to access attachments
+        guard let attributedString = try? NSAttributedString(data: rtfdData,
+                                                              options: [.documentType: NSAttributedString.DocumentType.rtfd],
+                                                              documentAttributes: nil) else {
+            print("Failed to parse RTFD data")
+            return nil
+        }
+
+        let length = attributedString.length
+        print("Processing RTFD with \(length) characters")
+
+        // First, collect all attachment locations
+        var attachmentRanges: [(range: NSRange, attachment: NSTextAttachment)] = []
+        attributedString.enumerateAttribute(.attachment, in: NSRange(location: 0, length: length), options: []) { value, range, stop in
+            if let attachment = value as? NSTextAttachment {
+                attachmentRanges.append((range: range, attachment: attachment))
+            }
+        }
+
+        print("Found \(attachmentRanges.count) attachments")
+
+        // Build result by walking through the string
+        let mutableResult = NSMutableString()
+        var currentIndex = 0
+
+        for (range, attachment) in attachmentRanges {
+            // Add text before this attachment
+            if range.location > currentIndex {
+                let textRange = NSRange(location: currentIndex, length: range.location - currentIndex)
+                let textBefore = attributedString.attributedSubstring(from: textRange).string
+                print("Adding text before attachment at \(range.location): '\(textBefore)'")
+                mutableResult.append(textBefore)
+            }
+
+            // Try to extract LaTeX from this attachment
+            var latex: String?
+
+            // Check if the attachment has file wrapper (contains the actual data)
+            if let fileWrapper = attachment.fileWrapper {
+                print("Found file attachment in RTFD: \(fileWrapper.preferredFilename ?? "unknown")")
+
+                // Check if it's an SVG file
+                if let filename = fileWrapper.preferredFilename, filename.hasSuffix(".svg"),
+                   let data = fileWrapper.regularFileContents,
+                   let svgString = String(data: data, encoding: .utf8) {
+                    print("Found SVG attachment, extracting LaTeX")
+                    latex = renderer.extractLatexFromSVG(svgString)
+                }
+
+                // Also check for PDF attachments
+                if latex == nil, let filename = fileWrapper.preferredFilename, filename.hasSuffix(".pdf"),
+                   let data = fileWrapper.regularFileContents {
+                    print("Found PDF attachment in RTFD (size: \(data.count) bytes)")
+                    latex = extractLatexFromPDF(data)
+                }
+            }
+
+            // Also try to get image data from the attachment
+            if latex == nil, let imageData = attachment.contents {
+                print("Found attachment with contents (size: \(imageData.count) bytes)")
+
+                // Try to parse as SVG
+                if let svgString = String(data: imageData, encoding: .utf8) {
+                    latex = renderer.extractLatexFromSVG(svgString)
+                }
+
+                // Try to parse as PDF
+                if latex == nil {
+                    latex = extractLatexFromPDF(imageData)
+                }
+            }
+
+            // Add the extracted LaTeX or keep the original character
+            if let latex = latex {
+                print("Extracted LaTeX from attachment: \(latex)")
+                mutableResult.append(latex)
+            } else {
+                print("Could not extract LaTeX from attachment, keeping original")
+                // Keep the original text from this range
+                let originalText = attributedString.attributedSubstring(from: range).string
+                mutableResult.append(originalText)
+            }
+
+            currentIndex = range.location + range.length
+        }
+
+        // Add any remaining text after the last attachment
+        if currentIndex < length {
+            let textRange = NSRange(location: currentIndex, length: length - currentIndex)
+            let textAfter = attributedString.attributedSubstring(from: textRange).string
+            print("Adding text after last attachment: '\(textAfter)'")
+            mutableResult.append(textAfter)
+        }
+
+        let result = mutableResult as String
+        print("Final extracted text: \(result)")
+        return result.isEmpty ? nil : result
+    }
+
     private func extractLatexFromRTFD(_ rtfdData: Data) -> String? {
+        // Single-image version for backward compatibility
         // RTFD is a wrapper format that can contain file attachments
         // Try to parse it as an NSAttributedString to access attachments
         guard let attributedString = try? NSAttributedString(data: rtfdData,

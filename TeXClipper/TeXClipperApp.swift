@@ -6,7 +6,7 @@ struct TeXClipperApp: App {
 
     var body: some Scene {
         Settings {
-            ContentView()
+            ContentView(shortcutManager: appDelegate.shortcutManager)
         }
     }
 }

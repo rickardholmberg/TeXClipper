@@ -16,8 +16,8 @@ struct ContentView: View {
         case render, renderInline, revert
     }
 
-    init() {
-        let manager = ShortcutManager.shared ?? ShortcutManager()
+    init(shortcutManager: ShortcutManager? = nil) {
+        let manager = shortcutManager ?? ShortcutManager.shared ?? ShortcutManager()
         self.shortcutManager = manager
         self._renderShortcut = State(initialValue: manager.getRenderShortcut())
         self._renderInlineShortcut = State(initialValue: manager.getRenderInlineShortcut())
