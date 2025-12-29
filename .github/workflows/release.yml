@@ -74,13 +74,16 @@ jobs:
 
           ### Keyboard Shortcuts
           - **⌘⌥K** - Render LaTeX (display mode)
-          - **⌘⌥I** - Render LaTeX (inline mode)
+          - **⌘⌥⌃K** - Render LaTeX (inline mode)
           - **⌘⌥⇧K** - Revert rendered math back to LaTeX
+
+          All shortcuts can be customized in the Settings dialog.
 
           ### Notes
           - This is an unsigned build. macOS will warn you on first launch.
           - The app requires Accessibility permissions to capture keyboard shortcuts system-wide.
           - Rendered math is vector graphics (PDF/SVG), not rasterized images.
+          - Multiple images can be reverted at once - select text with multiple rendered equations and revert them all to LaTeX.
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
