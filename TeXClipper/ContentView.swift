@@ -6,6 +6,7 @@ struct ContentView: View {
     @State private var renderShortcut: ShortcutConfig
     @State private var renderInlineShortcut: ShortcutConfig
     @State private var revertShortcut: ShortcutConfig
+    @State private var launchAtLogin: Bool
 
     let shortcutManager: ShortcutManager
 
@@ -19,6 +20,7 @@ struct ContentView: View {
         self._renderShortcut = State(initialValue: manager.getRenderShortcut())
         self._renderInlineShortcut = State(initialValue: manager.getRenderInlineShortcut())
         self._revertShortcut = State(initialValue: manager.getRevertShortcut())
+        self._launchAtLogin = State(initialValue: LoginItemManager.shared.isEnabled)
     }
 
     var body: some View {
@@ -101,6 +103,22 @@ struct ContentView: View {
                 }
             ))
 
+            GroupBox(label: Text("General")) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Toggle("Launch at login", isOn: $launchAtLogin)
+                        .onChange(of: launchAtLogin) { _, newValue in
+                            do {
+                                try LoginItemManager.shared.setEnabled(newValue)
+                            } catch {
+                                print("Failed to set launch at login: \(error)")
+                                // Revert the toggle on error
+                                launchAtLogin = !newValue
+                            }
+                        }
+                }
+                .padding()
+            }
+
             Spacer()
 
             VStack(spacing: 4) {
@@ -127,7 +145,7 @@ struct ContentView: View {
             .padding(.bottom)
         }
         .padding()
-        .frame(width: 500, height: 350)
+        .frame(width: 500, height: 420)
     }
 }
 
