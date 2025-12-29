@@ -33,9 +33,6 @@ class MathRenderer: NSObject {
     private func setupWebView() {
         let config = WKWebViewConfiguration()
 
-        // Enable JavaScript (should be default, but let's be explicit)
-        config.preferences.javaScriptEnabled = true
-
         // These preferences might help with loading
         if #available(macOS 11.0, *) {
             config.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
@@ -232,7 +229,7 @@ class MathRenderer: NSObject {
             })();
             """
 
-            webView?.evaluateJavaScript(js) { [weak self] _, error in
+            webView?.evaluateJavaScript(js) { _, error in
                 if let error = error {
                     print("JavaScript evaluation error (may be spurious for async code): \(error)")
                     // Note: evaluateJavaScript may report an error for async code that returns a Promise

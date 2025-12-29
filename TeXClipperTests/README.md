@@ -59,7 +59,7 @@ The tests cover:
 ## Requirements
 
 Tests require:
-- macOS 13.0 or later
+- macOS 14.0 or later
 - MathJax file in Resources (run `./setup-mathjax.sh` first)
 - Accessibility permissions may be requested during clipboard tests
 
