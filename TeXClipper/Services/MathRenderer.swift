@@ -290,6 +290,7 @@ class MathRenderer: NSObject {
             let pdfWebView = WKWebView(frame: .zero, configuration: config)
 
             // Create HTML wrapper for the SVG
+            // Inject hidden text containing the LaTeX source for recovery
             let html = """
             <!DOCTYPE html>
             <html>
@@ -298,9 +299,22 @@ class MathRenderer: NSObject {
                 <style>
                     body { margin: 0; padding: 0; }
                     svg { display: block; }
+                    #hidden-latex { 
+                        position: absolute; 
+                        top: 0;
+                        left: 0;
+                        transform: scale(0.001);
+                        transform-origin: top left;
+                        color: transparent; 
+                        z-index: -1;
+                        white-space: pre;
+                        pointer-events: none;
+                        font-family: monospace;
+                    }
                 </style>
             </head>
             <body>
+            <div id="hidden-latex">TeXClipperStart:\(latex):TeXClipperEnd</div>
             \(svgString)
             </body>
             </html>
@@ -349,6 +363,14 @@ class MathRenderer: NSObject {
                                             self.continuation.resume(returning: pdfData)
                                             return
                                         }
+                                        
+                                        // Add metadata to document attributes
+                                        var attributes = pdfDocument.documentAttributes ?? [:]
+                                        attributes[PDFDocumentAttribute.subjectAttribute] = "TeXClipper:\(self.latex)"
+                                        // Keywords is usually an array of strings in PDFDocumentAttribute
+                                        // We add the latex with prefix so we can identify it confidently
+                                        attributes[PDFDocumentAttribute.keywordsAttribute] = ["TeXClipper", "LaTeX", "TeXClipper:\(self.latex)"]
+                                        pdfDocument.documentAttributes = attributes
 
                                         // Create an annotation with the LaTeX content
                                         let annotation = PDFAnnotation(bounds: CGRect.zero, forType: .text, withProperties: nil)

@@ -1,43 +1,31 @@
 import SwiftUI
 
-@main
-struct TeXClipperApp: App {
-    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-
-    var body: some Scene {
-        Settings {
-            ContentView(shortcutManager: appDelegate.shortcutManager)
-        }
-    }
+@MainActor
+class AppModel: ObservableObject {
+    let shortcutManager = ShortcutManager()
 }
 
-class AppDelegate: NSObject, NSApplicationDelegate {
-    var shortcutManager: ShortcutManager?
-    var statusItem: NSStatusItem?
+@main
+struct TeXClipperApp: App {
+    @StateObject private var appModel = AppModel()
 
-    func applicationDidFinishLaunching(_ notification: Notification) {
-        shortcutManager = ShortcutManager()
-        setupMenuBar()
-    }
-
-    private func setupMenuBar() {
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-
-        if let button = statusItem?.button {
-            button.image = NSImage(systemSymbolName: "function", accessibilityDescription: "TeXClipper")
+    var body: some Scene {
+        MenuBarExtra("TeXClipper", systemImage: "function") {
+            SettingsLink {
+                Text("Settings...")
+            }
+            .keyboardShortcut(",", modifiers: .command)
+            
+            Divider()
+            
+            Button("Quit") {
+                NSApplication.shared.terminate(nil)
+            }
+            .keyboardShortcut("q", modifiers: .command)
         }
-
-        let menu = NSMenu()
-
-        menu.addItem(NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ","))
-        menu.addItem(NSMenuItem.separator())
-        menu.addItem(NSMenuItem(title: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
-
-        statusItem?.menu = menu
-    }
-
-    @objc func openSettings() {
-        NSApp.activate(ignoringOtherApps: true)
-        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        
+        Settings {
+            ContentView(shortcutManager: appModel.shortcutManager)
+        }
     }
 }

@@ -198,19 +198,60 @@ class ClipboardManager {
             // Wait for clipboard to update
             _ = await waitForClipboardChange(oldChangeCount: oldChangeCount)
 
+            // LOGGING: List all types
+            print("Clipboard types available: \(pasteboard.types?.map { $0.rawValue } ?? [])")
+
+            // LOGGING: Check HTML content
+            if let htmlData = pasteboard.data(forType: .html),
+                let htmlString = String(data: htmlData, encoding: .utf8)
+            {
+                print("Found HTML data on clipboard: \(htmlString.prefix(500))...")
+            }
+
             // Try to extract LaTeX from all images in the selection
             var resultAttributedString: NSAttributedString?
             var resultText: String?
+            var hasChanges = false
 
             // First check for RTFD data (rich text with attachments) - this can contain multiple images
             if let rtfdData = pasteboard.data(forType: .rtfd) {
                 print("Found RTFD data on clipboard, extracting all LaTeX from attachments")
-                resultAttributedString = extractAllLatexFromRTFD(rtfdData)
+                
+                // Helper to extract LaTeX sequences from PDF flavor if available
+                var pdfLatexSequences: [String]? = nil
+                if let pdfData = pasteboard.data(forType: .pdf) {
+                    pdfLatexSequences = extractLatexSequencesFromPDF(pdfData)
+                    if let count = pdfLatexSequences?.count {
+                        print("Found \(count) LaTeX sequences in PDF flavor")
+                    }
+                }
+
+                if let (attrString, changes) = extractAllLatexFromRTFD(
+                    rtfdData, pdfLatexSequences: pdfLatexSequences)
+                {
+                    resultAttributedString = attrString
+                    hasChanges = changes
+                }
             }
 
-            // If no RTFD, try single image formats using extraction strategies
-            if resultAttributedString == nil {
-                resultText = tryExtractionStrategies(from: pasteboard)
+            // If no RTFD, or if RTFD extraction yielded no changes, try single image formats
+            if resultAttributedString == nil || !hasChanges {
+                if let text = tryExtractionStrategies(from: pasteboard) {
+                    print("Fallback to single-item extraction strategy successful")
+                    resultText = text
+                    hasChanges = true
+                    // Prefer the single-item result since RTFD failed to produce changes
+                    resultAttributedString = nil
+                }
+            }
+
+            // If no changes were made (no LaTeX extracted), do not paste anything back
+            // This prevents degrading images (e.g. Word rasterizing vectors)
+            if !hasChanges {
+                print(
+                    "No LaTeX extracted from selection, aborting paste to preserve original content"
+                )
+                return
             }
 
             // Paste the result (either RTFD or plain text)
@@ -223,6 +264,14 @@ class ClipboardManager {
                 if let rtfdData = try? resultAttributedString.data(from: NSRange(location: 0, length: resultAttributedString.length),
                                                                     documentAttributes: [.documentType: NSAttributedString.DocumentType.rtfd]) {
                     pasteboard.setData(rtfdData, forType: .rtfd)
+                    
+                    // Also provide RTF for better compatibility (e.g. Microsoft Word)
+                    if let rtfData = try? resultAttributedString.data(
+                        from: NSRange(location: 0, length: resultAttributedString.length),
+                        documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf])
+                    {
+                        pasteboard.setData(rtfData, forType: .rtf)
+                    }
 
                     // Paste it
                     performPaste()
@@ -382,7 +431,9 @@ class ClipboardManager {
         }
     }
 
-    func extractAllLatexFromRTFD(_ rtfdData: Data) -> NSAttributedString? {
+    func extractAllLatexFromRTFD(_ rtfdData: Data, pdfLatexSequences: [String]? = nil) -> (
+        NSAttributedString, Bool
+    )? {
         // RTFD is a wrapper format that can contain file attachments
         // Try to parse it as an NSAttributedString to access attachments
         guard let attributedString = try? NSAttributedString(data: rtfdData,
@@ -399,10 +450,12 @@ class ClipboardManager {
         print("Found \(attachmentRanges.count) attachments")
 
         // Build result string by processing each attachment
-        let result = buildResultString(from: attributedString, attachments: attachmentRanges)
+        let (result, hasChanges) = buildResultString(
+            from: attributedString, attachments: attachmentRanges,
+            pdfLatexSequences: pdfLatexSequences)
 
-        print("Final result has \(result.length) characters")
-        return result.length > 0 ? result : nil
+        print("Final result has \(result.length) characters, changes made: \(hasChanges)")
+        return result.length > 0 ? (result, hasChanges) : nil
     }
 
     private func collectAttachments(from attributedString: NSAttributedString) -> [(range: NSRange, attachment: NSTextAttachment)] {
@@ -415,9 +468,15 @@ class ClipboardManager {
         return attachmentRanges
     }
 
-    private func buildResultString(from attributedString: NSAttributedString, attachments: [(range: NSRange, attachment: NSTextAttachment)]) -> NSMutableAttributedString {
+    func buildResultString(
+        from attributedString: NSAttributedString,
+        attachments: [(range: NSRange, attachment: NSTextAttachment)],
+        pdfLatexSequences: [String]? = nil
+    ) -> (NSMutableAttributedString, Bool) {
         let mutableResult = NSMutableAttributedString()
         var currentIndex = 0
+        var hasChanges = false
+        var latexSequenceIndex = 0
 
         for (range, attachment) in attachments {
             // Add text before this attachment
@@ -429,15 +488,79 @@ class ClipboardManager {
             }
 
             // Try to extract LaTeX from this attachment
-            let latex = extractLatexFromAttachment(attachment)
+            var latex = extractLatexFromAttachment(attachment)
+
+            // Fallback: Use PDF sequence if available and attachment looks suspicious
+            if latex == nil, let sequences = pdfLatexSequences, latexSequenceIndex < sequences.count
+            {
+                let filename = attachment.fileWrapper?.preferredFilename ?? ""
+                // Heuristic: Word often converts PDF attachments to "unknown" (no extension)
+                // while preserving extension for PNGs ("unknown.png").
+                // We also check if it has a standard image extension.
+                let lowerFilename = filename.lowercased()
+                let isExplicitImage =
+                    lowerFilename.hasSuffix(".png") || lowerFilename.hasSuffix(".jpg")
+                    || lowerFilename.hasSuffix(".jpeg") || lowerFilename.hasSuffix(".gif")
+
+                let isLikelyPDF =
+                    filename == "unknown" || (!filename.contains(".") && !filename.isEmpty)
+
+                if !isExplicitImage && (isLikelyPDF || filename.isEmpty) {
+                    print(
+                        "Attachment '\(filename)' matched to PDF LaTeX sequence \(latexSequenceIndex)"
+                    )
+                    latex = sequences[latexSequenceIndex]
+                    latexSequenceIndex += 1
+                } else {
+                    print("Attachment '\(filename)' skipped (likely non-TeX image)")
+                }
+            }
 
             // Add the extracted LaTeX or preserve the original attachment
             if let latex = latex {
                 print("Extracted LaTeX from attachment: \(latex)")
                 mutableResult.append(NSAttributedString(string: latex))
+                hasChanges = true
             } else {
                 print("Could not extract LaTeX from attachment, preserving original attachment")
                 let originalSubstring = attributedString.attributedSubstring(from: range)
+                
+                // Ensure the attachment has a valid filename, otherwise Word might drop it
+                if let attachment = originalSubstring.attribute(
+                    .attachment, at: 0, effectiveRange: nil) as? NSTextAttachment,
+                    let wrapper = attachment.fileWrapper
+                {
+
+                    // If the wrapper doesn't have a name, or has a generic name, fix it
+                    if wrapper.preferredFilename == nil || wrapper.preferredFilename == "unknown"
+                        || wrapper.preferredFilename?.isEmpty == true
+                    {
+                        // Try to determine extension from data
+                        var ext = "dat"
+                        if let data = wrapper.regularFileContents {
+                            ext = fileExtension(for: data)
+                        }
+
+                        let newName = "image-\(UUID().uuidString).\(ext)"
+                        wrapper.preferredFilename = newName
+                        print("Assigned new filename to preserved attachment: \(newName)")
+                    }
+
+                    // Re-create the attachment to ensure it's fresh and properly wrapped
+                    if let data = wrapper.regularFileContents {
+                        let newWrapper = FileWrapper(regularFileWithContents: data)
+                        newWrapper.preferredFilename = wrapper.preferredFilename
+                        let newAttachment = NSTextAttachment(fileWrapper: newWrapper)
+                        let newAttrString = NSAttributedString(attachment: newAttachment)
+                        mutableResult.append(newAttrString)
+                        print(
+                            "Re-created attachment with filename: \(newWrapper.preferredFilename ?? "nil")"
+                        )
+                        currentIndex = range.location + range.length
+                        continue  // Skip appending originalSubstring
+                    }
+                }
+
                 print("Original substring length: \(originalSubstring.length), string: '\(originalSubstring.string)'")
                 mutableResult.append(originalSubstring)
             }
@@ -453,7 +576,7 @@ class ClipboardManager {
             mutableResult.append(textAfter)
         }
 
-        return mutableResult
+        return (mutableResult, hasChanges)
     }
 
     private func extractLatexFromAttachment(_ attachment: NSTextAttachment) -> String? {
@@ -470,12 +593,22 @@ class ClipboardManager {
                 return latex
             }
 
-            // Check for PDF attachments
-            if let filename = fileWrapper.preferredFilename, filename.hasSuffix(".pdf"),
-               let data = fileWrapper.regularFileContents,
-               let latex = extractLatexFromPDF(data) {
-                print("Found PDF attachment in RTFD (size: \(data.count) bytes)")
-                return latex
+            // Check for PDF attachments - relax extension check or check magic bytes
+            if let data = fileWrapper.regularFileContents {
+                let header = data.prefix(8).map { String(format: "%02X", $0) }.joined(
+                    separator: " ")
+                print("Attachment data header: \(header)")
+
+                // Check for PDF magic bytes %PDF
+                let isPDF = data.prefix(4).elementsEqual("%PDF".utf8)
+                let hasPDFExtension = fileWrapper.preferredFilename?.hasSuffix(".pdf") ?? false
+
+                if isPDF || hasPDFExtension {
+                    print("Found potential PDF attachment in RTFD (size: \(data.count) bytes)")
+                    if let latex = extractLatexFromPDF(data) {
+                        return latex
+                    }
+                }
             }
         }
 
@@ -561,6 +694,34 @@ class ClipboardManager {
         return foundLatex
     }
 
+    func extractLatexSequencesFromPDF(_ pdfData: Data) -> [String]? {
+        guard let pdfDocument = PDFDocument(data: pdfData) else { return nil }
+        var fullText = ""
+        for i in 0..<pdfDocument.pageCount {
+            fullText += pdfDocument.page(at: i)?.string ?? ""
+        }
+
+        // Regex to find markers
+        // Pattern: TeXClipperStart:(.*?):TeXClipperEnd
+        let pattern = "TeXClipperStart:(.*?):TeXClipperEnd"
+        guard
+            let regex = try? NSRegularExpression(
+                pattern: pattern, options: [.dotMatchesLineSeparators])
+        else { return nil }
+
+        let matches = regex.matches(
+            in: fullText, options: [], range: NSRange(location: 0, length: fullText.utf16.count))
+
+        if matches.isEmpty { return nil }
+
+        return matches.compactMap { match in
+            if let range = Range(match.range(at: 1), in: fullText) {
+                return String(fullText[range])
+            }
+            return nil
+        }
+    }
+
     private func extractLatexFromPDF(_ pdfData: Data) -> String? {
         // Create a PDF document from the data
         guard let pdfDocument = PDFDocument(data: pdfData) else {
@@ -576,7 +737,7 @@ class ClipboardManager {
             print("PDF attributes: \(attributes.keys)")
 
             // Check for custom metadata that might contain LaTeX
-            if let subject = attributes["Subject"] as? String {
+            if let subject = attributes[PDFDocumentAttribute.subjectAttribute] as? String {
                 print("PDF Subject: \(subject)")
                 if subject.hasPrefix("TeXClipper:") {
                     let latex = String(subject.dropFirst("TeXClipper:".count))
@@ -585,12 +746,30 @@ class ClipboardManager {
                 }
             }
 
-            if let keywords = attributes["Keywords"] as? String {
-                print("PDF Keywords: \(keywords)")
-                if keywords.hasPrefix("TeXClipper:") {
-                    let latex = String(keywords.dropFirst("TeXClipper:".count))
-                    print("Found LaTeX in Keywords metadata: \(latex)")
-                    return latex
+            if let keywords = attributes[PDFDocumentAttribute.keywordsAttribute] {
+                print("PDF Keywords found")
+                if let keywordsString = keywords as? String {
+                    if keywordsString.hasPrefix("TeXClipper:") {
+                        let latex = String(keywordsString.dropFirst("TeXClipper:".count))
+                        print("Found LaTeX in Keywords string: \(latex)")
+                        return latex
+                    }
+                } else if let keywordsArray = keywords as? [String] {
+                    print("PDF Keywords array: \(keywordsArray)")
+                    for keyword in keywordsArray {
+                        if keyword.hasPrefix("TeXClipper:") {
+                            let latex = String(keyword.dropFirst("TeXClipper:".count))
+                            print("Found LaTeX in Keywords array: \(latex)")
+                            return latex
+                        }
+                        // Also check if the keyword itself is the latex (if we stored it as raw latex in the array)
+                        // But we stored it as "TeXClipper:<latex>" in Subject, and just <latex> in keywords array in MathRenderer.
+                        // Let's check for raw latex if it looks like latex? No, safer to look for prefix.
+                    }
+                    // In MathRenderer we added ["TeXClipper", "LaTeX", self.latex]
+                    // So we should check if we can find the latex.
+                    // But wait, if we just put raw latex in keywords, how do we know it's ours?
+                    // Maybe we should rely on Subject primarily.
                 }
             }
         }
@@ -598,6 +777,30 @@ class ClipboardManager {
         // Try to extract text from the PDF (looking for embedded SVG or LaTeX)
         for pageIndex in 0..<pdfDocument.pageCount {
             guard let page = pdfDocument.page(at: pageIndex) else { continue }
+
+            // Check visible text content (hidden text strategy)
+            if let text = page.string {
+                print("PDF page \(pageIndex) text: \(text.prefix(100))")  // Debug logging
+
+                // Check for new marker format
+                if let startRange = text.range(of: "TeXClipperStart:"),
+                    let endRange = text.range(
+                        of: ":TeXClipperEnd", range: startRange.upperBound..<text.endIndex)
+                {
+                    let latex = String(text[startRange.upperBound..<endRange.lowerBound])
+                    print("Found LaTeX in PDF text content (markers): \(latex)")
+                    return latex
+                }
+
+                // Fallback for legacy format
+                if let range = text.range(of: "TeXClipper:") {
+                    let latex = String(text[range.upperBound...])
+                    // Trim whitespace/newlines that might be added by PDF text extraction
+                    let trimmed = latex.trimmingCharacters(in: .whitespacesAndNewlines)
+                    print("Found LaTeX in PDF text content: \(trimmed)")
+                    return trimmed
+                }
+            }
 
             // Get the page's data representation and look for embedded SVG
             if let pageData = page.dataRepresentation {
@@ -630,6 +833,27 @@ class ClipboardManager {
     private func sleep(milliseconds: UInt64) async {
         let nanoseconds = milliseconds * 1_000_000
         try? await Task.sleep(nanoseconds: nanoseconds)
+    }
+
+    private func fileExtension(for data: Data) -> String {
+        let header = data.prefix(4).map { $0 }
+        if header.count >= 4 {
+            // PNG: 89 50 4E 47
+            if header[0] == 0x89 && header[1] == 0x50 && header[2] == 0x4E && header[3] == 0x47 {
+                return "png"
+            }
+            // PDF: 25 50 44 46
+            if header[0] == 0x25 && header[1] == 0x50 && header[2] == 0x44 && header[3] == 0x46 {
+                return "pdf"
+            }
+            // JPEG: FF D8 FF
+            if header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF { return "jpg" }
+            // GIF: 47 49 46 38
+            if header[0] == 0x47 && header[1] == 0x49 && header[2] == 0x46 && header[3] == 0x38 {
+                return "gif"
+            }
+        }
+        return "dat"
     }
 
     private func waitForClipboardChange(oldChangeCount: Int, timeout: TimeInterval = 1.0) async -> Bool {

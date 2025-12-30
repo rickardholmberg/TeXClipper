@@ -281,7 +281,7 @@ final class ClipboardManagerTests: XCTestCase {
         }
 
         // Extract all LaTeX from the RTFD
-        guard let resultAttributedString = clipboardManager.extractAllLatexFromRTFD(rtfdData) else {
+        guard let (resultAttributedString, _) = clipboardManager.extractAllLatexFromRTFD(rtfdData) else {
             XCTFail("Failed to extract LaTeX from RTFD")
             return
         }
@@ -395,7 +395,7 @@ final class ClipboardManagerTests: XCTestCase {
         // 2. Preserve duck image as object replacement character (U+FFFC) with attachment
         // 3. Preserve text " some text "
         // 4. Replace second attachment with "\\int_0^\\infty e^{-x} dx"
-        guard let resultAttributedString = clipboardManager.extractAllLatexFromRTFD(rtfdData) else {
+        guard let (resultAttributedString, _) = clipboardManager.extractAllLatexFromRTFD(rtfdData) else {
             XCTFail("Failed to extract LaTeX from RTFD")
             return
         }
