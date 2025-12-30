@@ -39,18 +39,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func openSettings() {
         NSApp.activate(ignoringOtherApps: true)
 
-        // Use Cmd+, to open settings (standard macOS shortcut)
-        let source = CGEventSource(stateID: .hidSystemState)
-
-        // Key down for comma with Command
-        if let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0x2B, keyDown: true) {
-            keyDown.flags = .maskCommand
-            keyDown.post(tap: .cghidEventTap)
-        }
-
-        // Key up
-        if let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0x2B, keyDown: false) {
-            keyUp.post(tap: .cghidEventTap)
+        if #available(macOS 13.0, *) {
+            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        } else {
+            NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
         }
     }
 }

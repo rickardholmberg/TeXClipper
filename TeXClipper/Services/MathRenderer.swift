@@ -52,12 +52,26 @@ class MathRenderer: NSObject {
     }
 
     private func loadMathJax() {
-        guard let mathjaxPath = Bundle.main.path(forResource: "mathjax-tex-svg", ofType: "js") else {
+        // Try to find the resource in the bundle where this class is defined, or main bundle
+        var mathjaxPath = Bundle(for: MathRenderer.self).path(forResource: "mathjax-tex-svg", ofType: "js") 
+            ?? Bundle.main.path(forResource: "mathjax-tex-svg", ofType: "js")
+            
+        // Fallback for tests: Look in the source directory
+        if mathjaxPath == nil {
+            let currentDir = FileManager.default.currentDirectoryPath
+            let localPath = currentDir + "/TeXClipper/Resources/mathjax-tex-svg.js"
+            if FileManager.default.fileExists(atPath: localPath) {
+                mathjaxPath = localPath
+                print("Found MathJax at local path: \(localPath)")
+            }
+        }
+
+        guard let path = mathjaxPath else {
             print("Error: Could not find MathJax file in bundle")
             return
         }
 
-        guard let mathjaxJS = try? String(contentsOfFile: mathjaxPath) else {
+        guard let mathjaxJS = try? String(contentsOfFile: path) else {
             print("Error: Could not read MathJax file")
             return
         }

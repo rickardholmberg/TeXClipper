@@ -2,6 +2,79 @@ import Foundation
 import Carbon
 import AppKit
 
+/// Manages keyboard layout translation to ensure shortcuts display correctly
+/// for all keyboard layouts (e.g. AZERTY, QWERTZ).
+class KeyboardLayoutManager {
+    static let shared = KeyboardLayoutManager()
+
+    private var currentLayoutData: Data?
+
+    private init() {
+        refreshLayout()
+
+        // Listen for keyboard layout changes
+        DistributedNotificationCenter.default().addObserver(
+            self,
+            selector: #selector(inputSourceChanged),
+            name: NSNotification.Name(kTISNotifySelectedKeyboardInputSourceChanged as String),
+            object: nil
+        )
+    }
+
+    deinit {
+        DistributedNotificationCenter.default().removeObserver(self)
+    }
+
+    @objc private func refreshLayout() {
+        let currentKeyboard = TISCopyCurrentKeyboardInputSource().takeRetainedValue()
+        let rawLayoutData = TISGetInputSourceProperty(
+            currentKeyboard, kTISPropertyUnicodeKeyLayoutData)
+
+        if let layoutData = rawLayoutData {
+            let dataRef = Unmanaged<CFData>.fromOpaque(layoutData).takeUnretainedValue()
+            self.currentLayoutData = dataRef as Data
+        } else {
+            self.currentLayoutData = nil
+        }
+    }
+
+    @objc private func inputSourceChanged() {
+        refreshLayout()
+    }
+
+    func character(for keyCode: UInt32) -> String? {
+        guard let data = currentLayoutData else { return nil }
+
+        var deadKeyState: UInt32 = 0
+        var actualStringLength = 0
+        var unicodeString = [UniChar](repeating: 0, count: 4)
+
+        let status = data.withUnsafeBytes { bufferPointer in
+            guard let baseAddress = bufferPointer.baseAddress else { return OSStatus(1) }
+            let layoutHeader = baseAddress.bindMemory(to: UCKeyboardLayout.self, capacity: 1)
+
+            return UCKeyTranslate(
+                layoutHeader,
+                UInt16(keyCode),
+                UInt16(kUCKeyActionDisplay),
+                0,  // No modifiers for the base key
+                UInt32(LMGetKbdType()),
+                UInt32(kUCKeyTranslateNoDeadKeysBit),
+                &deadKeyState,
+                4,
+                &actualStringLength,
+                &unicodeString
+            )
+        }
+
+        if status == noErr && actualStringLength > 0 {
+            return String(utf16CodeUnits: unicodeString, count: actualStringLength).uppercased()
+        }
+
+        return nil
+    }
+}
+
 struct ShortcutConfig: Codable {
     var keyCode: UInt32
     var modifiers: UInt32
@@ -16,6 +89,16 @@ struct ShortcutConfig: Codable {
     }
 
     var keyString: String {
+        // Try to get the character from the current keyboard layout
+        if let char = KeyboardLayoutManager.shared.character(for: keyCode) {
+            return char
+        }
+
+        // Fallback to US QWERTY if something fails
+        return fallbackKeyString
+    }
+
+    var fallbackKeyString: String {
         // Map key codes to readable strings
         switch keyCode {
         case UInt32(kVK_ANSI_A): return "A"
