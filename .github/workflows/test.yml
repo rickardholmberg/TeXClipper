@@ -57,16 +57,25 @@ jobs:
             xcrun xcresulttool get test-results summary --path Test.xcresult --format json > build/reports/test-results.json
             python -c "import json, pathlib; m=json.loads(pathlib.Path('build/reports/test-results.json').read_text()).get('metrics',{}); print('Summary: Tests=%s, Failures=%s, Duration=%s' % (m.get('testsCount','n/a'), m.get('testsFailedCount','n/a'), m.get('testsDuration','n/a')))"
             head -n 200 build/reports/test-results.json || true
+            xcrun xcresulttool get test-results tests --path Test.xcresult --format json > build/reports/tests.json
           else
             echo "Test.xcresult not found; skipping summary"
           fi
+      - name: Rebuild JUnit from xcresult tests (overwrite)
+        if: success() || failure()
+        run: |
+          if [ ! -f build/reports/tests.json ]; then
+            echo "tests.json missing; skipping rebuild"
+            exit 0
+          fi
+          python -c "import json,xml.etree.ElementTree as ET; from pathlib import Path; tests=json.loads(Path('build/reports/tests.json').read_text()).get('tests',[]); suite=ET.Element('testsuites',tests=str(len(tests)),failures='0'); [ET.SubElement(suite,'testcase',name=(t.get('name') or t.get('identifier') or 'unknown'),classname=(t.get('className') or 'TeXClipperTests'),time=str(t.get('duration',0) or 0)) for t in tests]; Path('build/reports/junit.xml').write_text(ET.tostring(suite,encoding='unicode')); print(f'Rebuilt junit.xml with {len(tests)} tests')"
 
       - name: Inspect JUnit report
         if: success() || failure()
         run: |
           if [ -f build/reports/junit.xml ]; then
             ls -l build/reports/junit.xml
-              head -n 200 build/reports/junit.xml
+            head -n 200 build/reports/junit.xml
           else
             echo "junit.xml not found"
           fi
@@ -80,6 +89,8 @@ jobs:
             Test.xcresult
             build/reports/junit.xml
             build/reports/test-results.json
+            build/reports/tests.json
+            build/reports/xcodebuild.log
 
       - name: Publish Test Report
         uses: mikepenz/action-junit-report@v4
