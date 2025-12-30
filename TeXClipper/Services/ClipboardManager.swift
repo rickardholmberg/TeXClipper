@@ -190,10 +190,13 @@ class ClipboardManager {
 
     func revertSVGToLatex() async {
         await withClipboardRestore { pasteboard in
+            let oldChangeCount = pasteboard.changeCount
+            
             // Copy selection to clipboard
             performCopy()
 
-            await sleep(milliseconds: 300)
+            // Wait for clipboard to update
+            _ = await waitForClipboardChange(oldChangeCount: oldChangeCount)
 
             // Try to extract LaTeX from all images in the selection
             var resultAttributedString: NSAttributedString?
@@ -275,19 +278,16 @@ class ClipboardManager {
             performCopy()
 
             // Wait for clipboard to update
-            await sleep(milliseconds: 300)
-
-            print("After wait, change count: \(pasteboard.changeCount)")
+            let changed = await waitForClipboardChange(oldChangeCount: oldChangeCount)
+            
+            if changed {
+                print("Clipboard updated (changeCount: \(oldChangeCount) -> \(pasteboard.changeCount))")
+            } else {
+                print("WARNING: Clipboard did not update within timeout")
+            }
 
             let selectedText = pasteboard.string(forType: .string) ?? ""
-            print("Captured text: '\(selectedText)' (length: \(selectedText.count))")
-
-            // Check if clipboard actually changed
-            if pasteboard.changeCount > oldChangeCount {
-                print("Clipboard was updated (changeCount: \(oldChangeCount) -> \(pasteboard.changeCount))")
-            } else {
-                print("WARNING: Clipboard may not have been updated properly")
-            }
+            print("Captured text length: \(selectedText.count)")
 
             return selectedText
         }
@@ -299,7 +299,7 @@ class ClipboardManager {
 
             switch content {
             case .text(let text):
-                print("Replacing selection with text: '\(text.prefix(100))...'")
+                print("Replacing selection with text (length: \(text.count))")
                 pasteboard.setString(text, forType: .string)
 
             case .svg(let svgString):
@@ -630,6 +630,20 @@ class ClipboardManager {
     private func sleep(milliseconds: UInt64) async {
         let nanoseconds = milliseconds * 1_000_000
         try? await Task.sleep(nanoseconds: nanoseconds)
+    }
+
+    private func waitForClipboardChange(oldChangeCount: Int, timeout: TimeInterval = 1.0) async -> Bool {
+        let startTime = Date()
+        let pasteboard = NSPasteboard.general
+
+        while Date().timeIntervalSince(startTime) < timeout {
+            if pasteboard.changeCount != oldChangeCount {
+                return true
+            }
+            try? await Task.sleep(nanoseconds: 50_000_000) // 50ms
+        }
+
+        return false
     }
 }
 
