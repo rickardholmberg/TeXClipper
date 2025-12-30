@@ -38,11 +38,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func openSettings() {
         NSApp.activate(ignoringOtherApps: true)
-
-        if #available(macOS 13.0, *) {
-            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-        } else {
-            NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
-        }
+        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
     }
 }
