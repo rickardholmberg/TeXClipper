@@ -41,6 +41,8 @@ jobs:
       if: success() || failure()
       run: |
         ls -R Test.xcresult || echo "Test.xcresult not found"
+        echo "Verifying xcresulttool capability..."
+        xcrun xcresulttool get --path Test.xcresult --format json | head -n 20 || echo "xcresulttool failed manually"
 
     - name: Test Report
       uses: kishikawakatsumi/xcresulttool@v1
@@ -48,6 +50,7 @@ jobs:
       with:
         path: Test.xcresult
         show-passed-tests: false
+        show-code-coverage: false
 
     - name: Upload test results
       uses: actions/upload-artifact@v4
