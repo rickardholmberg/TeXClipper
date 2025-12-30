@@ -41,7 +41,6 @@ jobs:
             -project TeXClipper.xcodeproj \
             -scheme TeXClipper \
             -destination 'platform=macOS,arch=arm64' \
-            -only-testing:TeXClipperTests \
             -enableCodeCoverage YES \
             -resultBundlePath Test.xcresult \
             CODE_SIGN_IDENTITY="-" \
@@ -54,9 +53,19 @@ jobs:
           mkdir -p build/reports
           if [ -d "Test.xcresult" ]; then
             xcrun xcresulttool get test-results --path Test.xcresult --format json > build/reports/test-results.json
-            python -c 'import json, pathlib; m=json.loads(pathlib.Path("build/reports/test-results.json").read_text()).get("metrics",{}); print("Tests: %s, Failures: %s, Duration: %s" % (m.get("testsCount","n/a"), m.get("testsFailedCount","n/a"), m.get("testsDuration","n/a")))'
+            python -c "import json, pathlib; m=json.loads(pathlib.Path('build/reports/test-results.json').read_text()).get('metrics',{}); print('Summary: Tests=%s, Failures=%s, Duration=%s' % (m.get('testsCount','n/a'), m.get('testsFailedCount','n/a'), m.get('testsDuration','n/a')))"
           else
             echo "Test.xcresult not found; skipping summary"
+          fi
+
+      - name: Inspect JUnit report
+        if: success() || failure()
+        run: |
+          if [ -f build/reports/junit.xml ]; then
+            ls -l build/reports/junit.xml
+            head -n 40 build/reports/junit.xml
+          else
+            echo "junit.xml not found"
           fi
 
       - name: Upload test results
