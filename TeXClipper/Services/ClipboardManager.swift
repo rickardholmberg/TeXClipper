@@ -287,7 +287,7 @@ class ClipboardManager {
             }
 
             let selectedText = pasteboard.string(forType: .string) ?? ""
-            print("Captured text: '\(selectedText)' (length: \(selectedText.count))")
+            print("Captured text length: \(selectedText.count)")
 
             return selectedText
         }
@@ -299,7 +299,7 @@ class ClipboardManager {
 
             switch content {
             case .text(let text):
-                print("Replacing selection with text: '\(text.prefix(100))...'")
+                print("Replacing selection with text (length: \(text.count))")
                 pasteboard.setString(text, forType: .string)
 
             case .svg(let svgString):

@@ -32,20 +32,25 @@ class MathRenderer: NSObject {
 
     private func setupWebView() {
         let config = WKWebViewConfiguration()
+        
+        // Security: Disable features we don't need
+        config.preferences.javaScriptCanOpenWindowsAutomatically = false
+        config.defaultWebpagePreferences.allowsContentJavaScript = true
 
         // Register message handler for ready callback
         config.userContentController.add(self, name: "ready")
 
         // Enable JavaScript console logging (DEBUG builds only for security)
         #if DEBUG
-        if #available(macOS 11.0, *) {
-            config.preferences.setValue(true, forKey: "developerExtrasEnabled")
-        }
+        config.preferences.setValue(true, forKey: "developerExtrasEnabled")
         #endif
 
         webView = WKWebView(frame: .zero, configuration: config)
         webView?.navigationDelegate = self
         webView?.uiDelegate = self
+        
+        // Security: Disallow navigation to any other URL
+        webView?.allowsBackForwardNavigationGestures = false
 
         print("WebView created, about to load MathJax...")
         loadMathJax()

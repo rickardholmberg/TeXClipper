@@ -206,10 +206,19 @@ class ShortcutManager {
     }
 
     deinit {
-        Task { [weak self] in
-            await MainActor.run {
-                self?.unregisterShortcuts()
-            }
+        // Capture hotkey refs to clean up
+        // This cleanup is synchronous and doesn't need main actor isolation
+        if let ref = renderHotKeyRef {
+            UnregisterEventHotKey(ref)
+        }
+        if let ref = renderInlineHotKeyRef {
+            UnregisterEventHotKey(ref)
+        }
+        if let ref = revertHotKeyRef {
+            UnregisterEventHotKey(ref)
+        }
+        if let handler = eventHandler {
+            RemoveEventHandler(handler)
         }
     }
 
