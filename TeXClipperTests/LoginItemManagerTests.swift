@@ -2,47 +2,43 @@ import XCTest
 import ServiceManagement
 @testable import TeXClipper
 
+final class MockLoginItemService: LoginItemServicing {
+    private(set) var internalStatus: SMAppService.Status = .notRegistered
+
+    var status: SMAppService.Status {
+        internalStatus
+    }
+
+    func register() throws {
+        internalStatus = .enabled
+    }
+
+    func unregister() throws {
+        internalStatus = .notRegistered
+    }
+}
+
 final class LoginItemManagerTests: XCTestCase {
 
     var loginItemManager: LoginItemManager!
+    var mockService: MockLoginItemService!
 
-    // Class-level teardown that runs AFTER all tests in this class complete
-    // This is a final safety net to ensure login item is disabled even if individual
-    // test tearDown methods fail or are interrupted
     override class func tearDown() {
         super.tearDown()
-
-        // Final cleanup attempt
-        let manager = LoginItemManager.shared
-        try? manager.setEnabled(false)
-
-        // Verify cleanup succeeded
-        if manager.isEnabled {
-            print("ERROR: Login item still enabled after test suite completion!")
-            print("Please manually disable via System Settings > General > Login Items")
-        }
+        // Reset shared instance back to the system-backed implementation for other tests
+        LoginItemManager.shared = LoginItemManager()
     }
 
     override func setUp() async throws {
+        mockService = MockLoginItemService()
+        LoginItemManager.shared = LoginItemManager(service: mockService)
         loginItemManager = LoginItemManager.shared
-
-        // Ensure we start from a known state - unconditionally attempt to disable
-        // Use try? since the item might already be disabled, which could throw
-        try? loginItemManager.setEnabled(false)
     }
 
     override func tearDown() async throws {
-        // Clean up - ALWAYS attempt to disable login item, even if tests failed
-        // This ensures we don't leave login items enabled after test runs
-        // Use try? since it's already disabled in most cases and we don't want
-        // tearDown itself to throw and mask test failures
         try? loginItemManager.setEnabled(false)
-
-        // Additional safety check: verify it's actually disabled
-        // If this fails, print a warning so developers know to manually clean up
-        if loginItemManager.isEnabled {
-            print("WARNING: Failed to disable login item in tearDown. Manual cleanup may be required.")
-        }
+        loginItemManager = nil
+        mockService = nil
     }
 
     // MARK: - Basic Functionality Tests
@@ -66,9 +62,8 @@ final class LoginItemManagerTests: XCTestCase {
         // Verify it's enabled
         XCTAssertTrue(loginItemManager.isEnabled, "Login item should be enabled after calling setEnabled(true)")
 
-        // Verify the system status directly
-        let systemStatus = SMAppService.mainApp.status
-        XCTAssertEqual(systemStatus, .enabled, "SMAppService should report status as enabled")
+        // Verify the underlying service directly
+        XCTAssertEqual(mockService.status, .enabled, "Mock service should report status as enabled")
     }
 
     func testDisableLoginItem() throws {
@@ -82,9 +77,8 @@ final class LoginItemManagerTests: XCTestCase {
         // Verify it's disabled
         XCTAssertFalse(loginItemManager.isEnabled, "Login item should be disabled after calling setEnabled(false)")
 
-        // Verify the system status directly
-        let systemStatus = SMAppService.mainApp.status
-        XCTAssertEqual(systemStatus, .notRegistered, "SMAppService should report status as notRegistered")
+        // Verify the service status directly
+        XCTAssertEqual(mockService.status, .notRegistered, "Mock service should report status as notRegistered")
     }
 
     func testToggleLoginItem() throws {
@@ -132,17 +126,17 @@ final class LoginItemManagerTests: XCTestCase {
     // MARK: - State Consistency Tests
 
     func testIsEnabledReflectsSystemState() throws {
-        // Test that isEnabled accurately reflects SMAppService.mainApp.status
+        // Test that isEnabled accurately reflects the service status
 
         // Disabled state
         try loginItemManager.setEnabled(false)
-        XCTAssertEqual(loginItemManager.isEnabled, SMAppService.mainApp.status == .enabled,
-                      "isEnabled should match SMAppService status (disabled)")
+        XCTAssertEqual(loginItemManager.isEnabled, mockService.status == .enabled,
+                  "isEnabled should match service status (disabled)")
 
         // Enabled state
         try loginItemManager.setEnabled(true)
-        XCTAssertEqual(loginItemManager.isEnabled, SMAppService.mainApp.status == .enabled,
-                      "isEnabled should match SMAppService status (enabled)")
+        XCTAssertEqual(loginItemManager.isEnabled, mockService.status == .enabled,
+                  "isEnabled should match service status (enabled)")
     }
 
     func testMultipleReadsOfIsEnabled() throws {
@@ -205,13 +199,13 @@ final class LoginItemManagerTests: XCTestCase {
     func testStatusMatchesExpectedValues() throws {
         // Test disabled state
         try loginItemManager.setEnabled(false)
-        let disabledStatus = SMAppService.mainApp.status
+        let disabledStatus = mockService.status
         XCTAssertTrue(disabledStatus == .notRegistered || disabledStatus == .notFound,
-                     "Disabled status should be notRegistered or notFound, got: \(disabledStatus)")
+                 "Disabled status should be notRegistered or notFound, got: \(disabledStatus)")
 
         // Test enabled state
         try loginItemManager.setEnabled(true)
-        let enabledStatus = SMAppService.mainApp.status
+        let enabledStatus = mockService.status
         XCTAssertEqual(enabledStatus, .enabled, "Enabled status should be .enabled, got: \(enabledStatus)")
     }
 }

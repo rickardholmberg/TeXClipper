@@ -19,6 +19,41 @@ enum PasteContent {
     case pdfWithSVG(pdfData: Data, svgString: String)
 }
 
+private struct PasteboardSnapshotItem {
+    let dataByType: [String: Data]
+}
+
+private struct PasteboardSnapshot {
+    let items: [PasteboardSnapshotItem]
+
+    init(pasteboard: NSPasteboard) {
+        self.items = pasteboard.pasteboardItems?.map { item in
+            var payload: [String: Data] = [:]
+            for type in item.types {
+                if let data = item.data(forType: type) {
+                    payload[type.rawValue] = data
+                }
+            }
+            return PasteboardSnapshotItem(dataByType: payload)
+        } ?? []
+    }
+
+    func restore(to pasteboard: NSPasteboard) {
+        pasteboard.clearContents()
+        guard !items.isEmpty else { return }
+
+        let restoredItems: [NSPasteboardItem] = items.map { snapshot in
+            let item = NSPasteboardItem()
+            for (typeName, data) in snapshot.dataByType {
+                item.setData(data, forType: NSPasteboard.PasteboardType(typeName))
+            }
+            return item
+        }
+
+        pasteboard.writeObjects(restoredItems)
+    }
+}
+
 protocol LaTeXExtractionStrategy {
     func extract(from pasteboard: NSPasteboard, renderer: MathRenderer, pdfExtractor: (Data) -> String?) -> String?
 }
@@ -73,6 +108,7 @@ struct PDFExtractionStrategy: LaTeXExtractionStrategy {
     }
 }
 
+@MainActor
 class ClipboardManager {
     private let renderer = MathRenderer.shared
 
@@ -122,19 +158,11 @@ class ClipboardManager {
     }
 
     /// Execute an operation with automatic clipboard state restoration
-    private func withClipboardRestore<T>(_ operation: (NSPasteboard) -> T) -> T {
+    private func withClipboardRestore<T>(_ operation: (NSPasteboard) async throws -> T) async rethrows -> T {
         let pasteboard = NSPasteboard.general
-        let oldContents = pasteboard.string(forType: .string)
-
-        let result = operation(pasteboard)
-
-        // Restore old clipboard contents
-        pasteboard.clearContents()
-        if let oldContents = oldContents {
-            pasteboard.setString(oldContents, forType: .string)
-        }
-
-        return result
+        let snapshot = PasteboardSnapshot(pasteboard: pasteboard)
+        defer { snapshot.restore(to: pasteboard) }
+        return try await operation(pasteboard)
     }
 
     func convertSelectionToSVG(displayMode: Bool = true) async {
@@ -161,59 +189,57 @@ class ClipboardManager {
     }
 
     func revertSVGToLatex() async {
-        await MainActor.run {
-            withClipboardRestore { pasteboard in
-                // Copy selection to clipboard
-                performCopy()
+        await withClipboardRestore { pasteboard in
+            // Copy selection to clipboard
+            performCopy()
 
-                Thread.sleep(forTimeInterval: 0.3)
+            await sleep(milliseconds: 300)
 
-                // Try to extract LaTeX from all images in the selection
-                var resultAttributedString: NSAttributedString?
-                var resultText: String?
+            // Try to extract LaTeX from all images in the selection
+            var resultAttributedString: NSAttributedString?
+            var resultText: String?
 
-                // First check for RTFD data (rich text with attachments) - this can contain multiple images
-                if let rtfdData = pasteboard.data(forType: .rtfd) {
-                    print("Found RTFD data on clipboard, extracting all LaTeX from attachments")
-                    resultAttributedString = extractAllLatexFromRTFD(rtfdData)
-                }
+            // First check for RTFD data (rich text with attachments) - this can contain multiple images
+            if let rtfdData = pasteboard.data(forType: .rtfd) {
+                print("Found RTFD data on clipboard, extracting all LaTeX from attachments")
+                resultAttributedString = extractAllLatexFromRTFD(rtfdData)
+            }
 
-                // If no RTFD, try single image formats using extraction strategies
-                if resultAttributedString == nil {
-                    resultText = tryExtractionStrategies(from: pasteboard)
-                }
+            // If no RTFD, try single image formats using extraction strategies
+            if resultAttributedString == nil {
+                resultText = tryExtractionStrategies(from: pasteboard)
+            }
 
-                // Paste the result (either RTFD or plain text)
-                if let resultAttributedString = resultAttributedString {
-                    print("Pasting RTFD with \(resultAttributedString.length) characters")
-                    // Replace selection with attributed string (preserves non-LaTeX images)
-                    pasteboard.clearContents()
+            // Paste the result (either RTFD or plain text)
+            if let resultAttributedString = resultAttributedString {
+                print("Pasting RTFD with \(resultAttributedString.length) characters")
+                // Replace selection with attributed string (preserves non-LaTeX images)
+                pasteboard.clearContents()
 
-                    // Convert to RTFD data for pasting
-                    if let rtfdData = try? resultAttributedString.data(from: NSRange(location: 0, length: resultAttributedString.length),
-                                                                        documentAttributes: [.documentType: NSAttributedString.DocumentType.rtfd]) {
-                        pasteboard.setData(rtfdData, forType: .rtfd)
-
-                        // Paste it
-                        performPaste()
-
-                        Thread.sleep(forTimeInterval: 0.2)
-                        print("Successfully reverted to LaTeX (RTFD)")
-                    }
-                } else if let resultText = resultText {
-                    print("Extracted LaTeX: \(resultText)")
-                    // Replace selection with LaTeX (plain text)
-                    pasteboard.clearContents()
-                    pasteboard.setString(resultText, forType: .string)
+                // Convert to RTFD data for pasting
+                if let rtfdData = try? resultAttributedString.data(from: NSRange(location: 0, length: resultAttributedString.length),
+                                                                    documentAttributes: [.documentType: NSAttributedString.DocumentType.rtfd]) {
+                    pasteboard.setData(rtfdData, forType: .rtfd)
 
                     // Paste it
                     performPaste()
 
-                    Thread.sleep(forTimeInterval: 0.2)
-                    print("Successfully reverted to LaTeX (plain text)")
-                } else {
-                    print("Could not extract LaTeX from clipboard - no SVG metadata found")
+                    await sleep(milliseconds: 200)
+                    print("Successfully reverted to LaTeX (RTFD)")
                 }
+            } else if let resultText = resultText {
+                print("Extracted LaTeX: \(resultText)")
+                // Replace selection with LaTeX (plain text)
+                pasteboard.clearContents()
+                pasteboard.setString(resultText, forType: .string)
+
+                // Paste it
+                performPaste()
+
+                await sleep(milliseconds: 200)
+                print("Successfully reverted to LaTeX (plain text)")
+            } else {
+                print("Could not extract LaTeX from clipboard - no SVG metadata found")
             }
         }
     }
@@ -236,100 +262,94 @@ class ClipboardManager {
     }
 
     private func getSelectedText() async -> String {
-        return await MainActor.run {
-            return withClipboardRestore { pasteboard in
-                // Save current clipboard state for comparison
-                let oldChangeCount = pasteboard.changeCount
-                let oldContents = pasteboard.string(forType: .string)
+        await withClipboardRestore { pasteboard in
+            // Save current clipboard state for comparison
+            let oldChangeCount = pasteboard.changeCount
+            let oldContents = pasteboard.string(forType: .string)
 
-                print("Old clipboard contents: \(oldContents ?? "nil")")
-                print("Old change count: \(oldChangeCount)")
+            let previousClipboard = oldContents ?? "nil"
+            print("Old clipboard contents: \(previousClipboard)")
+            print("Old change count: \(oldChangeCount)")
 
-                // Copy selection to clipboard
-                performCopy()
+            // Copy selection to clipboard
+            performCopy()
 
-                // Wait for clipboard to update
-                Thread.sleep(forTimeInterval: 0.3)
+            // Wait for clipboard to update
+            await sleep(milliseconds: 300)
 
-                print("After wait, change count: \(pasteboard.changeCount)")
+            print("After wait, change count: \(pasteboard.changeCount)")
 
-                let selectedText = pasteboard.string(forType: .string) ?? ""
-                print("Captured text: '\(selectedText)' (length: \(selectedText.count))")
+            let selectedText = pasteboard.string(forType: .string) ?? ""
+            print("Captured text: '\(selectedText)' (length: \(selectedText.count))")
 
-                // Check if clipboard actually changed
-                if pasteboard.changeCount > oldChangeCount {
-                    print("Clipboard was updated (changeCount: \(oldChangeCount) -> \(pasteboard.changeCount))")
-                } else {
-                    print("WARNING: Clipboard may not have been updated properly")
-                }
-
-                return selectedText
+            // Check if clipboard actually changed
+            if pasteboard.changeCount > oldChangeCount {
+                print("Clipboard was updated (changeCount: \(oldChangeCount) -> \(pasteboard.changeCount))")
+            } else {
+                print("WARNING: Clipboard may not have been updated properly")
             }
+
+            return selectedText
         }
     }
 
     private func replaceSelection(with content: PasteContent) async {
-        await MainActor.run {
-            withClipboardRestore { pasteboard in
-                pasteboard.clearContents()
+        await withClipboardRestore { pasteboard in
+            pasteboard.clearContents()
 
-                switch content {
-                case .text(let text):
-                    print("Replacing selection with text: '\(text.prefix(100))...'")
-                    pasteboard.setString(text, forType: .string)
+            switch content {
+            case .text(let text):
+                print("Replacing selection with text: '\(text.prefix(100))...'")
+                pasteboard.setString(text, forType: .string)
 
-                case .svg(let svgString):
-                    print("Replacing selection with SVG (vector)")
-                    guard let svgData = svgString.data(using: .utf8) else {
-                        print("Failed to convert SVG string to data")
-                        return
-                    }
-
-                    // Try multiple formats for maximum compatibility
-                    // 1. SVG as image data (for apps that support SVG)
-                    pasteboard.setData(svgData, forType: NSPasteboard.PasteboardType("public.svg-image"))
-
-                    // 2. Create NSImage from SVG for apps that don't support SVG directly
-                    if let image = NSImage(data: svgData) {
-                        // Set TIFF representation which preserves vector data when possible
-                        if let tiffData = image.tiffRepresentation {
-                            pasteboard.setData(tiffData, forType: .tiff)
-                        }
-                    }
-                    print("SVG added to pasteboard")
-
-                case .pdfWithSVG(let pdfData, let svgString):
-                    print("Replacing selection with PDF + SVG metadata (vector)")
-                    guard let svgData = svgString.data(using: .utf8) else {
-                        print("Failed to convert SVG to data")
-                        return
-                    }
-
-                    // 1. PDF for display (primary format most apps will use)
-                    pasteboard.setData(pdfData, forType: .pdf)
-
-                    // 2. SVG with LaTeX metadata for revert functionality
-                    pasteboard.setData(svgData, forType: NSPasteboard.PasteboardType("public.svg-image"))
-
-                    // 3. Also add as custom type for guaranteed retrieval
-                    pasteboard.setData(svgData, forType: NSPasteboard.PasteboardType("com.TeXClipper.svg"))
-                    print("PDF and SVG added to pasteboard")
+            case .svg(let svgString):
+                print("Replacing selection with SVG (vector)")
+                guard let svgData = svgString.data(using: .utf8) else {
+                    print("Failed to convert SVG string to data")
+                    return
                 }
 
-                // Paste the content
-                performPaste()
-                Thread.sleep(forTimeInterval: 0.2)
+                // Try multiple formats for maximum compatibility
+                // 1. SVG as image data (for apps that support SVG)
+                pasteboard.setData(svgData, forType: NSPasteboard.PasteboardType("public.svg-image"))
 
-                print("Selection replaced")
+                // 2. Create NSImage from SVG for apps that don't support SVG directly
+                if let image = NSImage(data: svgData) {
+                    // Set TIFF representation which preserves vector data when possible
+                    if let tiffData = image.tiffRepresentation {
+                        pasteboard.setData(tiffData, forType: .tiff)
+                    }
+                }
+                print("SVG added to pasteboard")
+
+            case .pdfWithSVG(let pdfData, let svgString):
+                print("Replacing selection with PDF + SVG metadata (vector)")
+                guard let svgData = svgString.data(using: .utf8) else {
+                    print("Failed to convert SVG to data")
+                    return
+                }
+
+                // 1. PDF for display (primary format most apps will use)
+                pasteboard.setData(pdfData, forType: .pdf)
+
+                // 2. SVG with LaTeX metadata for revert functionality
+                pasteboard.setData(svgData, forType: NSPasteboard.PasteboardType("public.svg-image"))
+
+                // 3. Also add as custom type for guaranteed retrieval
+                pasteboard.setData(svgData, forType: NSPasteboard.PasteboardType("com.TeXClipper.svg"))
+                print("PDF and SVG added to pasteboard")
             }
+
+            // Paste the content
+            performPaste()
+            await sleep(milliseconds: 200)
+
+            print("Selection replaced")
         }
     }
 
     private func replaceSelectionWithPDF(_ pdfData: Data) async {
-        await MainActor.run {
-            let pasteboard = NSPasteboard.general
-            let oldContents = pasteboard.string(forType: .string)
-
+        await withClipboardRestore { pasteboard in
             print("Replacing selection with PDF (vector)")
 
             // Clear and set PDF data
@@ -356,13 +376,7 @@ class ClipboardManager {
             print("Posted Cmd+V event for PDF")
 
             // Wait for paste to complete
-            Thread.sleep(forTimeInterval: 0.2)
-
-            // Restore old clipboard contents
-            if let oldContents = oldContents {
-                pasteboard.clearContents()
-                pasteboard.setString(oldContents, forType: .string)
-            }
+            await sleep(milliseconds: 200)
 
             print("PDF pasted")
         }
@@ -611,6 +625,11 @@ class ClipboardManager {
 
         print("Could not extract LaTeX from PDF")
         return nil
+    }
+
+    private func sleep(milliseconds: UInt64) async {
+        let nanoseconds = milliseconds * 1_000_000
+        try? await Task.sleep(nanoseconds: nanoseconds)
     }
 }
 

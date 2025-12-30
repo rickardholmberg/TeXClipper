@@ -199,11 +199,22 @@ class MathRenderer: NSObject {
             let messageHandler = WKScriptMessageHandlerWrapper { [weak self] message in
                 guard let self = self else { return }
 
-                if let svgString = message.body as? String {
-                    print("Received SVG from JavaScript, length: \(svgString.count)")
-                    continuation.resume(returning: svgString)
-                } else if let error = message.body as? String {
-                    continuation.resume(throwing: NSError(domain: "MathRenderer", code: -1, userInfo: [NSLocalizedDescriptionKey: error]))
+                if let payload = message.body as? [String: Any],
+                   let kind = payload["kind"] as? String {
+                    switch kind {
+                    case "success":
+                        if let svgString = payload["svg"] as? String {
+                            print("Received SVG from JavaScript, length: \(svgString.count)")
+                            continuation.resume(returning: svgString)
+                        } else {
+                            continuation.resume(throwing: NSError(domain: "MathRenderer", code: -1, userInfo: [NSLocalizedDescriptionKey: "Missing SVG payload"]))
+                        }
+                    case "error":
+                        let errorMessage = payload["message"] as? String ?? "Unknown rendering error"
+                        continuation.resume(throwing: NSError(domain: "MathRenderer", code: -1, userInfo: [NSLocalizedDescriptionKey: errorMessage]))
+                    default:
+                        continuation.resume(throwing: NSError(domain: "MathRenderer", code: -1, userInfo: [NSLocalizedDescriptionKey: "Unexpected message kind: \(kind)"]))
+                    }
                 } else {
                     continuation.resume(throwing: NSError(domain: "MathRenderer", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid result from JavaScript"]))
                 }
@@ -223,9 +234,10 @@ class MathRenderer: NSObject {
                 try {
                     const latex = \(latexJSON);
                     const result = await renderToSVG(latex, \(displayMode));
-                    window.webkit.messageHandlers.\(callbackName).postMessage(result);
+                    window.webkit.messageHandlers.\(callbackName).postMessage({ kind: 'success', svg: result });
                 } catch (e) {
-                    window.webkit.messageHandlers.\(callbackName).postMessage('Error: ' + e.message);
+                    const errorMessage = (e && e.message) ? e.message : 'Unknown rendering error';
+                    window.webkit.messageHandlers.\(callbackName).postMessage({ kind: 'error', message: errorMessage });
                 }
             })();
             """

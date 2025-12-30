@@ -92,7 +92,7 @@ class ShortcutManager {
     private var revertHotKeyRef: EventHotKeyRef?
     private var eventHandler: EventHandlerRef?
 
-    private let clipboardManager = ClipboardManager()
+    private let clipboardManager: ClipboardManager
 
     // Default shortcuts
     static let defaultRenderShortcut = ShortcutConfig(
@@ -115,13 +115,19 @@ class ShortcutManager {
     private let renderInlineShortcutKey = "renderInlineShortcut"
     private let revertShortcutKey = "revertShortcut"
 
+    @MainActor
     init() {
+        self.clipboardManager = ClipboardManager()
         Self.shared = self
         registerShortcuts()
     }
 
     deinit {
-        unregisterShortcuts()
+        Task { [weak self] in
+            await MainActor.run {
+                self?.unregisterShortcuts()
+            }
+        }
     }
 
     // Get current shortcuts from UserDefaults
@@ -150,6 +156,7 @@ class ShortcutManager {
     }
 
     // Set shortcuts
+    @MainActor
     func setRenderShortcut(_ config: ShortcutConfig) {
         if let data = try? JSONEncoder().encode(config) {
             UserDefaults.standard.set(data, forKey: renderShortcutKey)
@@ -157,6 +164,7 @@ class ShortcutManager {
         }
     }
 
+    @MainActor
     func setRenderInlineShortcut(_ config: ShortcutConfig) {
         if let data = try? JSONEncoder().encode(config) {
             UserDefaults.standard.set(data, forKey: renderInlineShortcutKey)
@@ -164,6 +172,7 @@ class ShortcutManager {
         }
     }
 
+    @MainActor
     func setRevertShortcut(_ config: ShortcutConfig) {
         if let data = try? JSONEncoder().encode(config) {
             UserDefaults.standard.set(data, forKey: revertShortcutKey)
@@ -171,11 +180,13 @@ class ShortcutManager {
         }
     }
 
+    @MainActor
     private func reregisterShortcuts() {
         unregisterShortcuts()
         registerShortcuts()
     }
 
+    @MainActor
     private func registerShortcuts() {
         let renderHotKeyID = EventHotKeyID(signature: 0x52454E44, id: 1) // 'REND'
         let renderInlineHotKeyID = EventHotKeyID(signature: 0x52454E49, id: 2) // 'RENI'
@@ -229,6 +240,7 @@ class ShortcutManager {
         print("Event handler installation status: \(handlerStatus)")
     }
 
+    @MainActor
     private func unregisterShortcuts() {
         if let ref = renderHotKeyRef {
             UnregisterEventHotKey(ref)
