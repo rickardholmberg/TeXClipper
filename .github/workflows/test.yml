@@ -32,11 +32,15 @@ jobs:
           -scheme TeXClipper \
           -destination 'platform=macOS' \
           -enableCodeCoverage YES \
-          -derivedDataPath build \
           -resultBundlePath Test.xcresult \
           CODE_SIGN_IDENTITY="-" \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGNING_ALLOWED=NO
+
+    - name: Debug xcresult
+      if: success() || failure()
+      run: |
+        ls -R Test.xcresult || echo "Test.xcresult not found"
 
     - name: Test Report
       uses: kishikawakatsumi/xcresulttool@v1
