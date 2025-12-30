@@ -52,7 +52,7 @@ jobs:
         run: |
           mkdir -p build/reports
           if [ -d "Test.xcresult" ]; then
-            xcrun xcresulttool get test-results --path Test.xcresult --format json > build/reports/test-results.json
+            xcrun xcresulttool get test-results summary --path Test.xcresult --format json > build/reports/test-results.json
             python -c "import json, pathlib; m=json.loads(pathlib.Path('build/reports/test-results.json').read_text()).get('metrics',{}); print('Summary: Tests=%s, Failures=%s, Duration=%s' % (m.get('testsCount','n/a'), m.get('testsFailedCount','n/a'), m.get('testsDuration','n/a')))"
           else
             echo "Test.xcresult not found; skipping summary"
