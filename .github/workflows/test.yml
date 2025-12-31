@@ -63,29 +63,6 @@ jobs:
             echo "Test.xcresult not found; skipping trainer"
           fi
 
-      - name: Summarize xcresult (for debugging)
-        if: success() || failure()
-        run: |
-          mkdir -p build/reports
-          if [ -d "Test.xcresult" ]; then
-            xcrun xcresulttool get test-results summary --path Test.xcresult --format json > build/reports/test-results.json
-            python -c "import json, pathlib; data=json.loads(pathlib.Path('build/reports/test-results.json').read_text()); m=data.get('metrics') or {}; tests=m.get('testsCount', data.get('totalTestCount','n/a')); fails=m.get('testsFailedCount', data.get('failedTests','n/a')); dur=m.get('testsDuration', data.get('finishTime','n/a')); print(f'Summary: Tests={tests}, Failures={fails}, Duration={dur}')"
-            head -n 200 build/reports/test-results.json || true
-            xcrun xcresulttool get test-results tests --path Test.xcresult --format json > build/reports/tests.json
-          else
-            echo "Test.xcresult not found; skipping summary"
-          fi
-
-      - name: Inspect JUnit report
-        if: success() || failure()
-        run: |
-          if [ -f build/reports/junit.xml ]; then
-            ls -l build/reports/junit.xml
-            head -n 200 build/reports/junit.xml
-          else
-            echo "junit.xml not found"
-          fi
-
       - name: Upload test results
         uses: actions/upload-artifact@v4
         if: always()
@@ -94,8 +71,6 @@ jobs:
           path: |
             Test.xcresult
             build/reports/junit.xml
-            build/reports/test-results.json
-            build/reports/tests.json
             build/reports/xcodebuild.log
 
       - name: Publish Test Report
