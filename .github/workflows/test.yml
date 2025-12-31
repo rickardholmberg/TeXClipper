@@ -30,8 +30,10 @@ jobs:
           chmod +x setup-mathjax.sh
           ./setup-mathjax.sh
 
-      - name: Setup xcpretty
-        run: gem install xcpretty --no-document
+      - name: Setup xcpretty and trainer
+        run: |
+          gem install xcpretty --no-document
+          gem install trainer --no-document
 
       - name: Run tests
         run: |
@@ -47,7 +49,19 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             | tee build/reports/xcodebuild.log \
-            | xcpretty -r junit --output build/reports/junit.xml
+            | xcpretty
+
+      - name: Generate JUnit with trainer
+        if: success() || failure()
+        run: |
+          if [ -d "Test.xcresult" ]; then
+            trainer \
+              --path Test.xcresult \
+              --output_directory build/reports \
+              --output_filename junit.xml
+          else
+            echo "Test.xcresult not found; skipping trainer"
+          fi
 
       - name: Summarize xcresult (for debugging)
         if: success() || failure()
@@ -58,7 +72,6 @@ jobs:
             python -c "import json, pathlib; data=json.loads(pathlib.Path('build/reports/test-results.json').read_text()); m=data.get('metrics') or {}; tests=m.get('testsCount', data.get('totalTestCount','n/a')); fails=m.get('testsFailedCount', data.get('failedTests','n/a')); dur=m.get('testsDuration', data.get('finishTime','n/a')); print(f'Summary: Tests={tests}, Failures={fails}, Duration={dur}')"
             head -n 200 build/reports/test-results.json || true
             xcrun xcresulttool get test-results tests --path Test.xcresult --format json > build/reports/tests.json
-            python -c "import json,xml.etree.ElementTree as ET; from pathlib import Path; tests=json.loads(Path('build/reports/tests.json').read_text()).get('tests',[]); suite=ET.Element('testsuites',tests=str(len(tests)),failures='0'); [ET.SubElement(suite,'testcase',name=(t.get('name') or t.get('identifier') or 'unknown'),classname=(t.get('className') or 'TeXClipperTests'),time=str(t.get('duration',0) or 0)) for t in tests]; Path('build/reports/junit.xml').write_text(ET.tostring(suite,encoding='unicode')); print(f'Rebuilt junit.xml with {len(tests)} tests')"
           else
             echo "Test.xcresult not found; skipping summary"
           fi
