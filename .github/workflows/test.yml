@@ -11,35 +11,65 @@ on:
 jobs:
   test:
     runs-on: macos-latest
+    permissions:
+      checks: write
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Set up Xcode
-      uses: maxim-lobanov/setup-xcode@v1
-      with:
-        xcode-version: latest-stable
+      - name: Set up Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
 
-    - name: Download and setup MathJax
-      run: |
-        chmod +x setup-mathjax.sh
-        ./setup-mathjax.sh
+      - name: Download and setup MathJax
+        run: |
+          chmod +x setup-mathjax.sh
+          ./setup-mathjax.sh
 
-    - name: Run tests
-      run: |
-        xcodebuild test \
-          -scheme TeXClipper \
-          -destination 'platform=macOS' \
-          -enableCodeCoverage YES \
-          CODE_SIGN_IDENTITY="-" \
-          CODE_SIGNING_REQUIRED=NO \
-          CODE_SIGNING_ALLOWED=NO
+      - name: Setup trainer
+        run: gem install trainer --no-document
 
-    - name: Upload test results
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: test-results
-        path: |
-          build/Logs/Test/*.xcresult
+      - name: Run tests
+        run: |
+          mkdir -p build/reports
+          set -o pipefail
+          xcodebuild test \
+            -project TeXClipper.xcodeproj \
+            -scheme TeXClipper \
+            -destination 'platform=macOS' \
+            -enableCodeCoverage YES \
+            -resultBundlePath Test.xcresult \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Generate JUnit with trainer
+        if: success() || failure()
+        run: |
+          if [ -d "Test.xcresult" ]; then
+            trainer \
+              --path Test.xcresult \
+              --output_directory build/reports \
+              --output_filename junit.xml
+          else
+            echo "Test.xcresult not found; skipping trainer"
+          fi
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: |
+            Test.xcresult
+
+      - name: Publish Test Report
+        uses: mikepenz/action-junit-report@v4
+        if: success() || failure()
+        with:
+          report_paths: build/reports/junit.xml
+          require_tests: false
+          include_passed: true
+          check_name: JUnit Test Report
