@@ -45,8 +45,7 @@ jobs:
             -resultBundlePath Test.xcresult \
             CODE_SIGN_IDENTITY="-" \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            | tee build/reports/xcodebuild.log
+            CODE_SIGNING_ALLOWED=NO
 
       - name: Generate JUnit with trainer
         if: success() || failure()
@@ -67,8 +66,6 @@ jobs:
           name: test-results
           path: |
             Test.xcresult
-            build/reports/junit.xml
-            build/reports/xcodebuild.log
 
       - name: Publish Test Report
         uses: mikepenz/action-junit-report@v4
