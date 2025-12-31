@@ -13,8 +13,6 @@ jobs:
     runs-on: macos-latest
     permissions:
       checks: write
-      pull-requests: write
-      contents: read
 
     steps:
       - name: Checkout code
