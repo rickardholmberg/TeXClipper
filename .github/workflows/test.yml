@@ -30,10 +30,8 @@ jobs:
           chmod +x setup-mathjax.sh
           ./setup-mathjax.sh
 
-      - name: Setup xcpretty and trainer
-        run: |
-          gem install xcpretty --no-document
-          gem install trainer --no-document
+      - name: Setup trainer
+        run: gem install trainer --no-document
 
       - name: Run tests
         run: |
@@ -48,8 +46,7 @@ jobs:
             CODE_SIGN_IDENTITY="-" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
-            | tee build/reports/xcodebuild.log \
-            | xcpretty
+            | tee build/reports/xcodebuild.log
 
       - name: Generate JUnit with trainer
         if: success() || failure()
